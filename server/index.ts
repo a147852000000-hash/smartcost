@@ -114,7 +114,7 @@ app.put("/api/certificates/:id", (req,res) => {
   res.json(db.prepare("SELECT * FROM bank_certificates WHERE id=?").get(req.params.id));
 });
 
-app.put("/api/certificates/sync", (req,res) => {
+app.put("/api/certificates-sync", (req,res) => {
  const b=req.body;
  if(!isObject(b)||!Array.isArray(b.items)||b.items.length>5000)return sendError(res,400,"invalid certificates payload");
  const valid=b.items.every((x:any)=>isObject(x)&&text(x.id,100)&&validCertificate({
@@ -141,8 +141,8 @@ const backup = () => ({
   schemaVersion: 1,
   exportedAt: now(),
   expenses: db.prepare("SELECT * FROM expenses ORDER BY date").all(),
-  income: db.prepare("SELECT * FROM monthly_income ORDER BY month").all(),
-  certificates: db.prepare("SELECT * FROM bank_certificates ORDER BY maturityDate").all()
+  income: (db.prepare("SELECT * FROM monthly_income ORDER BY month").all() as Array<Record<string,unknown>>).map(row=>{try{return row.detailsJson?JSON.parse(String(row.detailsJson)):row}catch{return row}}),
+  certificates: (db.prepare("SELECT * FROM bank_certificates ORDER BY maturityDate").all() as Array<Record<string,unknown>>).map(row=>{try{return row.detailsJson?JSON.parse(String(row.detailsJson)):row}catch{return row}})
 });
 app.get("/api/backup", (_req,res) => res.json(backup()));
 app.post("/api/backup/restore", (req,res) => {
@@ -156,10 +156,10 @@ app.post("/api/backup/restore", (req,res) => {
     db.prepare("DELETE FROM expenses").run(); db.prepare("DELETE FROM monthly_income").run(); db.prepare("DELETE FROM bank_certificates").run();
     const e=db.prepare("INSERT INTO expenses(id,title,amount,type,category,date,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?)");
     for (const x of b.expenses as any[]) e.run(x.id,x.title,x.amount,x.type||"house",x.category,x.date,x.notes??null,x.createdAt||now(),x.updatedAt||now());
-    const i=db.prepare("INSERT INTO monthly_income(month,salary,bonuses,otherIncome,otherIncomeNote,updatedAt) VALUES(?,?,?,?,?,?)");
-    for (const x of b.income as any[]) i.run(x.month,x.salary,x.bonuses,x.otherIncome,x.otherIncomeNote??null,x.updatedAt||now());
-    const c=db.prepare("INSERT INTO bank_certificates(id,bankName,certificateNumber,duration,amount,issueDate,maturityDate,profitDate,profitAmount,profitFrequency,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)");
-    for (const x of b.certificates as any[]) c.run(x.id,x.bankName,x.certificateNumber??null,x.duration,x.amount,x.issueDate,x.maturityDate,x.profitDate,x.profitAmount,x.profitFrequency,x.notes??null,x.createdAt||now(),x.updatedAt||now());
+    const i=db.prepare("INSERT INTO monthly_income(month,salary,bonuses,otherIncome,otherIncomeNote,detailsJson,updatedAt) VALUES(?,?,?,?,?,?,?)");
+    for (const x of b.income as any[]) i.run(x.month,x.salary,x.bonuses,x.otherIncome,x.otherIncomeNote??null,JSON.stringify(x),x.updatedAt||now());
+    const c=db.prepare("INSERT INTO bank_certificates(id,bankName,certificateNumber,duration,amount,issueDate,maturityDate,profitDate,profitAmount,profitFrequency,notes,detailsJson,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    for (const x of b.certificates as any[]) c.run(x.id,x.bankName,x.certificateNumber??null,x.duration,x.amount,x.issueDate,x.maturityDate,x.profitDate,x.profitAmount,x.profitFrequency,x.notes??null,JSON.stringify(x),x.createdAt||now(),x.updatedAt||now());
   });
   try { restore(); res.json({ok:true,counts:{expenses:b.expenses.length,income:b.income.length,certificates:b.certificates.length}}); }
   catch { sendError(res,400,"backup could not be restored; no partial changes were kept"); }
