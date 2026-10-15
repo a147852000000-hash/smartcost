@@ -17,7 +17,7 @@ db.pragma("foreign_keys = ON");
 db.exec(`
 CREATE TABLE IF NOT EXISTS expenses (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, amount REAL NOT NULL CHECK(amount >= 0),
-  category TEXT NOT NULL, date TEXT NOT NULL, notes TEXT,
+  type TEXT NOT NULL DEFAULT 'house', category TEXT NOT NULL, date TEXT NOT NULL, notes TEXT,
   createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS monthly_income (
@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS bank_certificates (
   createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
 );
 `);
+
+try { db.exec("ALTER TABLE expenses ADD COLUMN type TEXT NOT NULL DEFAULT 'house'"); } catch { /* already migrated */ }
 
 app.disable("x-powered-by");
 app.use(cors({ origin: (process.env.CORS_ORIGIN || "http://localhost:5173").split(",").map(x => x.trim()) }));
@@ -57,15 +59,16 @@ app.get("/api/expenses", (req, res) => {
 });
 app.post("/api/expenses", (req, res) => {
   const b = req.body;
-  if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category, 80) || !date(b.date) || (b.notes !== undefined && typeof b.notes !== "string")) return sendError(res, 400, "invalid expense");
-  const t = now(), id = randomUUID();
-  db.prepare("INSERT INTO expenses(id,title,amount,category,date,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?)").run(id, b.title.trim(), b.amount, b.category.trim(), b.date, typeof b.notes === "string" ? b.notes.slice(0,2000) : null, t, t);
+  const validTypes = new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]);
+  if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category, 80) || !date(b.date) || (b.type !== undefined && !validTypes.has(String(b.type))) || (b.notes !== undefined && typeof b.notes !== "string")) return sendError(res, 400, "invalid expense");
+  const t = now(), id = typeof b.id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(b.id) ? b.id : randomUUID();
+  db.prepare("INSERT INTO expenses(id,title,amount,type,category,date,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?)").run(id, b.title.trim(), b.amount, String(b.type || "house"), b.category.trim(), b.date, typeof b.notes === "string" ? b.notes.slice(0,2000) : null, t, t);
   res.status(201).json(db.prepare("SELECT * FROM expenses WHERE id=?").get(id));
 });
 app.put("/api/expenses/:id", (req, res) => {
   const b = req.body;
-  if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category,80) || !date(b.date) || (b.notes !== undefined && typeof b.notes !== "string")) return sendError(res,400,"invalid expense");
-  const result = db.prepare("UPDATE expenses SET title=?,amount=?,category=?,date=?,notes=?,updatedAt=? WHERE id=?").run(b.title.trim(),b.amount,b.category.trim(),b.date,typeof b.notes==="string"?b.notes.slice(0,2000):null,now(),req.params.id);
+  if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category,80) || !date(b.date) || (b.type !== undefined && !new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]).has(String(b.type))) || (b.notes !== undefined && typeof b.notes !== "string")) return sendError(res,400,"invalid expense");
+  const result = db.prepare("UPDATE expenses SET title=?,amount=?,type=?,category=?,date=?,notes=?,updatedAt=? WHERE id=?").run(b.title.trim(),b.amount,String(b.type || "house"),b.category.trim(),b.date,typeof b.notes==="string"?b.notes.slice(0,2000):null,now(),req.params.id);
   if (!result.changes) return sendError(res,404,"expense not found");
   res.json(db.prepare("SELECT * FROM expenses WHERE id=?").get(req.params.id));
 });
@@ -118,14 +121,14 @@ app.get("/api/backup", (_req,res) => res.json(backup()));
 app.post("/api/backup/restore", (req,res) => {
   const b=req.body;
   if (!isObject(b) || b.schemaVersion!==1 || !Array.isArray(b.expenses) || !Array.isArray(b.income) || !Array.isArray(b.certificates) || b.expenses.length>10000 || b.income.length>2400 || b.certificates.length>5000) return sendError(res,400,"invalid backup format");
-  const expenseValid=b.expenses.every((x:any)=>isObject(x)&&text(x.id,100)&&text(x.title)&&nonnegative(x.amount)&&text(x.category,80)&&date(x.date)&&(x.notes===null||x.notes===undefined||typeof x.notes==="string"));
+  const expenseValid=b.expenses.every((x:any)=>isObject(x)&&text(x.id,100)&&text(x.title)&&nonnegative(x.amount)&&text(x.category,80)&&date(x.date)&&(x.type===undefined||new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]).has(String(x.type)))&&(x.notes===null||x.notes===undefined||typeof x.notes==="string"));
   const incomeValid=b.income.every((x:any)=>isObject(x)&&month(x.month)&&nonnegative(x.salary)&&nonnegative(x.bonuses)&&nonnegative(x.otherIncome));
   const certValid=b.certificates.every((x:any)=>isObject(x)&&text(x.id,100)&&validCertificate(x));
   if (!expenseValid || !incomeValid || !certValid) return sendError(res,400,"backup validation failed");
   const restore=db.transaction(() => {
     db.prepare("DELETE FROM expenses").run(); db.prepare("DELETE FROM monthly_income").run(); db.prepare("DELETE FROM bank_certificates").run();
-    const e=db.prepare("INSERT INTO expenses(id,title,amount,category,date,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?)");
-    for (const x of b.expenses as any[]) e.run(x.id,x.title,x.amount,x.category,x.date,x.notes??null,x.createdAt||now(),x.updatedAt||now());
+    const e=db.prepare("INSERT INTO expenses(id,title,amount,type,category,date,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?)");
+    for (const x of b.expenses as any[]) e.run(x.id,x.title,x.amount,x.type||"house",x.category,x.date,x.notes??null,x.createdAt||now(),x.updatedAt||now());
     const i=db.prepare("INSERT INTO monthly_income(month,salary,bonuses,otherIncome,otherIncomeNote,updatedAt) VALUES(?,?,?,?,?,?)");
     for (const x of b.income as any[]) i.run(x.month,x.salary,x.bonuses,x.otherIncome,x.otherIncomeNote??null,x.updatedAt||now());
     const c=db.prepare("INSERT INTO bank_certificates(id,bankName,certificateNumber,duration,amount,issueDate,maturityDate,profitDate,profitAmount,profitFrequency,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)");
