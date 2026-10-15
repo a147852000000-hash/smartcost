@@ -48,6 +48,14 @@ app.disable("x-powered-by");
 app.use(cors({ origin: (process.env.CORS_ORIGIN || "http://localhost:5173").split(",").map(x => x.trim()) }));
 app.use(express.json({ limit: "1mb" }));
 
+// Fail closed in production until authenticated user sessions and per-user data ownership exist.
+if (process.env.NODE_ENV === "production") {
+  app.use("/api", (req,res,next) => {
+    if (req.path === "/health") return next();
+    return res.status(503).json({ error: "SMARTCOST API is disabled in production until authentication is configured." });
+  });
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const text = (v: unknown, max = 240) => typeof v === "string" && v.trim().length > 0 && v.trim().length <= max;
 const nonnegative = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
