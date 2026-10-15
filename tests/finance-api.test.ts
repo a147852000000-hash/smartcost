@@ -59,6 +59,8 @@ test("expense create, read, update and delete use the finance type", async () =>
   }) });
   assert.equal(created.response.status, 201);
   assert.equal(created.body.type, "student");
+  const listed = await json("/api/expenses");
+  assert.ok(listed.body.some((row: any) => row.id === created.body.id));
   const id = String(created.body.id);
   const updated = await json("/api/expenses/" + id, { method: "PUT", body: JSON.stringify({
     title: "اختبار مصروف معدل", amount: 150, type: "student", category: "تعليم", date: "2026-10-15", notes: null
