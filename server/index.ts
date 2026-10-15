@@ -74,7 +74,7 @@ app.get("/api/expenses", (req, res) => {
 app.post("/api/expenses", (req, res) => {
   const b = req.body;
   const validTypes = new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]);
-  if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category, 80) || !date(b.date) || (b.type !== undefined && !validTypes.has(String(b.type))) || (b.notes !== undefined && typeof b.notes !== "string")) return sendError(res, 400, "invalid expense");
+  if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category, 80) || !date(b.date) || (b.type !== undefined && !validTypes.has(String(b.type))) || (b.notes !== undefined && b.notes !== null && typeof b.notes !== "string")) return sendError(res, 400, "invalid expense");
   const t = now(), id = typeof b.id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(b.id) ? b.id : randomUUID();
   db.prepare("INSERT INTO expenses(id,title,amount,type,category,date,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?)").run(id, b.title.trim(), b.amount, String(b.type || "house"), b.category.trim(), b.date, typeof b.notes === "string" ? b.notes.slice(0,2000) : null, t, t);
   res.status(201).json(db.prepare("SELECT * FROM expenses WHERE id=?").get(id));
