@@ -89,7 +89,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   // Canonical expense data is loaded from finance_expenses only.
   // Personal associations (جمعياتي) remain in their existing non-expense source.
   const [associationsList, setAssociationsList] = useState<AssociationRecord[]>(() => {
-    return StorageAdapter.getItem<AssociationRecord[]>('smart_time_personal_associations', []);
+    return StorageAdapter.getItem<AssociationRecord[]>('smartcost_personal_associations', []);
   });
 
   // Vehicle accidents are non-expense records and remain in their existing source.
@@ -104,7 +104,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       { id: 'student_sample_2', name: 'طالب 2', age: '16', stage: 'ثانوي' },
       { id: 'student_sample_3', name: 'طالب 3', age: '11', stage: 'ابتدائي' },
     ];
-    return StorageAdapter.getItem<StudentProfile[]>('smart_time_students', defaultStudents);
+    return StorageAdapter.getItem<StudentProfile[]>('smartcost_students', defaultStudents);
   });
 
   // Income Sources List
@@ -159,7 +159,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   // --- 3. PERSISTENCE WRAPPERS ---
   const handleSaveAssociations = (list: AssociationRecord[]) => {
     setAssociationsList(list);
-    StorageAdapter.setItem('smart_time_personal_associations', list);
+    StorageAdapter.setItem('smartcost_personal_associations', list);
   };
 
   const handleSaveAccidents = (list: VehicleAccidentRecord[]) => {
@@ -169,7 +169,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
   const handleSaveStudents = (list: StudentProfile[]) => {
     setStudents(list);
-    StorageAdapter.setItem('smart_time_students', list);
+    StorageAdapter.setItem('smartcost_students', list);
   };
 
   const handleSaveIncome = (list: MonthlyIncome[]) => {
