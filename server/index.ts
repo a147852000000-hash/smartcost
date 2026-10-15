@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const app = express();
@@ -14,31 +14,7 @@ const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS expenses (
-  id TEXT PRIMARY KEY, title TEXT NOT NULL, amount REAL NOT NULL CHECK(amount >= 0),
-  type TEXT NOT NULL DEFAULT 'house', category TEXT NOT NULL, date TEXT NOT NULL, notes TEXT,
-  createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS monthly_income (
-  month TEXT PRIMARY KEY, salary REAL NOT NULL DEFAULT 0 CHECK(salary >= 0),
-  bonuses REAL NOT NULL DEFAULT 0 CHECK(bonuses >= 0),
-  otherIncome REAL NOT NULL DEFAULT 0 CHECK(otherIncome >= 0),
-  otherIncomeNote TEXT, detailsJson TEXT, updatedAt TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS car_income_trips (
-  id TEXT PRIMARY KEY, date TEXT NOT NULL, amount REAL NOT NULL CHECK(amount >= 0),
-  tripJson TEXT NOT NULL, createdAt TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS bank_certificates (
-  id TEXT PRIMARY KEY, bankName TEXT NOT NULL, certificateNumber TEXT,
-  duration TEXT NOT NULL, amount REAL NOT NULL CHECK(amount > 0),
-  issueDate TEXT NOT NULL, maturityDate TEXT NOT NULL, profitDate TEXT NOT NULL,
-  profitAmount REAL NOT NULL DEFAULT 0 CHECK(profitAmount >= 0),
-  profitFrequency TEXT NOT NULL, notes TEXT, detailsJson TEXT,
-  createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
-);
-`);
+db.exec(readFileSync(resolve("server/schema.sql"), "utf8"));
 
 try { db.exec("ALTER TABLE expenses ADD COLUMN type TEXT NOT NULL DEFAULT 'house'"); } catch { /* already migrated */ }
 try { db.exec("ALTER TABLE monthly_income ADD COLUMN detailsJson TEXT"); } catch { /* already migrated */ }
