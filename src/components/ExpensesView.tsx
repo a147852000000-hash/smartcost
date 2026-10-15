@@ -55,7 +55,33 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       setCanonicalFinanceError(error instanceof Error ? error.message : 'تعذر قراءة البيانات المالية الموحدة.');
     }
   };
-  useEffect(() => { void refreshCanonicalExpenses(); }, []);
+  useEffect(() => {
+    void refreshCanonicalExpenses();
+    void (async () => {
+      try {
+        const [incomeResponse, certificateResponse] = await Promise.all([fetch("/api/income"), fetch("/api/certificates")]);
+        if (!incomeResponse.ok || !certificateResponse.ok) return;
+        const serverIncome = await incomeResponse.json() as MonthlyIncome[];
+        const serverCertificates = await certificateResponse.json() as BankCertificate[];
+        if (Array.isArray(serverIncome) && serverIncome.length > 0) {
+          setIncomeList(serverIncome);
+          ExpensesRepository.saveMonthlyIncome(serverIncome);
+        } else {
+          const localIncome = ExpensesRepository.getMonthlyIncome();
+          ExpensesRepository.saveMonthlyIncome(localIncome.length ? localIncome : incomeList);
+        }
+        if (Array.isArray(serverCertificates) && serverCertificates.length > 0) {
+          setCertificates(serverCertificates);
+          ExpensesRepository.saveBankCertificates(serverCertificates);
+        } else {
+          const localCertificates = ExpensesRepository.getBankCertificates();
+          ExpensesRepository.saveBankCertificates(localCertificates.length ? localCertificates : certificates);
+        }
+      } catch {
+        // Keep local finance records available if the API is temporarily unreachable.
+      }
+    })();
+  }, []);
 
 
   // --- 2. DATA STATES (PERSISTED) ---
@@ -99,7 +125,6 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    ExpensesRepository.saveMonthlyIncome([defaultIncome]);
     return [defaultIncome];
   });
 
@@ -128,7 +153,6 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    ExpensesRepository.saveBankCertificates([defaultCert]);
     return [defaultCert];
   });
 
