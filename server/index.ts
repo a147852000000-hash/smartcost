@@ -24,19 +24,21 @@ CREATE TABLE IF NOT EXISTS monthly_income (
   month TEXT PRIMARY KEY, salary REAL NOT NULL DEFAULT 0 CHECK(salary >= 0),
   bonuses REAL NOT NULL DEFAULT 0 CHECK(bonuses >= 0),
   otherIncome REAL NOT NULL DEFAULT 0 CHECK(otherIncome >= 0),
-  otherIncomeNote TEXT, updatedAt TEXT NOT NULL
+  otherIncomeNote TEXT, detailsJson TEXT, updatedAt TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS bank_certificates (
   id TEXT PRIMARY KEY, bankName TEXT NOT NULL, certificateNumber TEXT,
   duration TEXT NOT NULL, amount REAL NOT NULL CHECK(amount > 0),
   issueDate TEXT NOT NULL, maturityDate TEXT NOT NULL, profitDate TEXT NOT NULL,
   profitAmount REAL NOT NULL DEFAULT 0 CHECK(profitAmount >= 0),
-  profitFrequency TEXT NOT NULL, notes TEXT,
+  profitFrequency TEXT NOT NULL, notes TEXT, detailsJson TEXT,
   createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
 );
 `);
 
 try { db.exec("ALTER TABLE expenses ADD COLUMN type TEXT NOT NULL DEFAULT 'house'"); } catch { /* already migrated */ }
+try { db.exec("ALTER TABLE monthly_income ADD COLUMN detailsJson TEXT"); } catch { /* already migrated */ }
+try { db.exec("ALTER TABLE bank_certificates ADD COLUMN detailsJson TEXT"); } catch { /* already migrated */ }
 
 app.disable("x-powered-by");
 app.use(cors({ origin: (process.env.CORS_ORIGIN || "http://localhost:5173").split(",").map(x => x.trim()) }));
@@ -78,18 +80,25 @@ app.delete("/api/expenses/:id", (req,res) => {
   res.status(204).end();
 });
 
-app.get("/api/income", (_req,res) => res.json(db.prepare("SELECT * FROM monthly_income ORDER BY month DESC").all()));
+app.get("/api/income", (_req,res) => {
+  const rows=db.prepare("SELECT * FROM monthly_income ORDER BY month DESC").all() as Array<Record<string,unknown>>;
+  res.json(rows.map(row=>{try{return row.detailsJson?JSON.parse(String(row.detailsJson)):row}catch{return row}}));
+});
 app.put("/api/income/:month", (req,res) => {
   const b=req.body, m=req.params.month;
-  if (!month(m) || !isObject(b) || !nonnegative(b.salary) || !nonnegative(b.bonuses) || !nonnegative(b.otherIncome) || (b.otherIncomeNote!==undefined && typeof b.otherIncomeNote!=="string")) return sendError(res,400,"invalid monthly income");
-  db.prepare(`INSERT INTO monthly_income(month,salary,bonuses,otherIncome,otherIncomeNote,updatedAt) VALUES(?,?,?,?,?,?)
-  ON CONFLICT(month) DO UPDATE SET salary=excluded.salary,bonuses=excluded.bonuses,otherIncome=excluded.otherIncome,otherIncomeNote=excluded.otherIncomeNote,updatedAt=excluded.updatedAt`).run(m,b.salary,b.bonuses,b.otherIncome,typeof b.otherIncomeNote==="string"?b.otherIncomeNote.slice(0,1000):null,now());
-  res.json(db.prepare("SELECT * FROM monthly_income WHERE month=?").get(m));
+  if (!month(m) || !isObject(b) || !nonnegative(b.salary) || !nonnegative(b.bonuses) || !nonnegative(b.otherIncome) || (b.otherIncomeNote!==undefined && typeof b.otherIncomeNote!=="string") || (b.details!==undefined&&!isObject(b.details))) return sendError(res,400,"invalid monthly income");
+  db.prepare(`INSERT INTO monthly_income(month,salary,bonuses,otherIncome,otherIncomeNote,detailsJson,updatedAt) VALUES(?,?,?,?,?,?,?)
+  ON CONFLICT(month) DO UPDATE SET salary=excluded.salary,bonuses=excluded.bonuses,otherIncome=excluded.otherIncome,otherIncomeNote=excluded.otherIncomeNote,detailsJson=excluded.detailsJson,updatedAt=excluded.updatedAt`).run(m,b.salary,b.bonuses,b.otherIncome,typeof b.otherIncomeNote==="string"?b.otherIncomeNote.slice(0,1000):null,b.details?JSON.stringify(b.details):null,now());
+  const row=db.prepare("SELECT * FROM monthly_income WHERE month=?").get(m) as Record<string,unknown>;
+  res.json(b.details||row);
 });
 
 const frequencies = new Set(["monthly","quarterly","semiannual","annual","maturity"]);
 const validCertificate = (b: Record<string,unknown>) => text(b.bankName,160) && text(b.duration,100) && nonnegative(b.amount) && b.amount > 0 && date(b.issueDate) && date(b.maturityDate) && date(b.profitDate) && nonnegative(b.profitAmount) && text(b.profitFrequency,20) && frequencies.has(String(b.profitFrequency)) && (b.certificateNumber===undefined || typeof b.certificateNumber==="string") && (b.notes===undefined || typeof b.notes==="string");
-app.get("/api/certificates", (_req,res) => res.json(db.prepare("SELECT * FROM bank_certificates ORDER BY maturityDate").all()));
+app.get("/api/certificates", (_req,res) => {
+ const rows=db.prepare("SELECT * FROM bank_certificates ORDER BY maturityDate").all() as Array<Record<string,unknown>>;
+ res.json(rows.map(row=>{try{return row.detailsJson?JSON.parse(String(row.detailsJson)):row}catch{return row}}));
+});
 app.post("/api/certificates", (req,res) => {
   const b=req.body;
   if (!isObject(b) || !validCertificate(b)) return sendError(res,400,"invalid certificate");
@@ -104,6 +113,24 @@ app.put("/api/certificates/:id", (req,res) => {
   if (!result.changes) return sendError(res,404,"certificate not found");
   res.json(db.prepare("SELECT * FROM bank_certificates WHERE id=?").get(req.params.id));
 });
+
+app.put("/api/certificates/sync", (req,res) => {
+ const b=req.body;
+ if(!isObject(b)||!Array.isArray(b.items)||b.items.length>5000)return sendError(res,400,"invalid certificates payload");
+ const valid=b.items.every((x:any)=>isObject(x)&&text(x.id,100)&&validCertificate({
+  bankName:x.bankName,duration:x.duration,amount:x.amount,issueDate:x.issueDate,maturityDate:x.maturityDate,
+  profitDate:x.profitDate,profitAmount:x.profitAmount,profitFrequency:x.profitFrequency,
+  certificateNumber:x.certificateNumber,notes:x.notes
+ }));
+ if(!valid)return sendError(res,400,"certificate validation failed");
+ const tx=db.transaction(()=>{
+  db.prepare("DELETE FROM bank_certificates").run();
+  const stmt=db.prepare("INSERT INTO bank_certificates(id,bankName,certificateNumber,duration,amount,issueDate,maturityDate,profitDate,profitAmount,profitFrequency,notes,detailsJson,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+  for(const x of b.items as any[])stmt.run(x.id,x.bankName,x.certificateNumber??null,x.duration,x.amount,x.issueDate,x.maturityDate,x.profitDate,x.profitAmount,x.profitFrequency,x.notes??null,JSON.stringify(x),x.createdAt||now(),x.updatedAt||now());
+ });
+ try{tx();res.json({ok:true,count:b.items.length})}catch{sendError(res,400,"certificates could not be synced")}
+});
+
 app.delete("/api/certificates/:id", (req,res) => {
   const result=db.prepare("DELETE FROM bank_certificates WHERE id=?").run(req.params.id);
   if (!result.changes) return sendError(res,404,"certificate not found");
