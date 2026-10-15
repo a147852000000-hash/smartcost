@@ -1,43 +1,29 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { ExpensesView } from "./components/ExpensesView";
+import { IncomeCertificatesView } from "./components/IncomeCertificatesView";
+import type { Language } from "./types";
 
-type Expense = { id:string; title:string; amount:number; category:string; date:string; notes?:string|null };
-type Income = { month:string; salary:number; bonuses:number; otherIncome:number; otherIncomeNote?:string|null };
-type Certificate = { id:string; bankName:string; duration:string; amount:number; issueDate:string; maturityDate:string; profitDate:string; profitAmount:number; profitFrequency:string; certificateNumber?:string|null; notes?:string|null };
-const today = new Date().toISOString().slice(0,10);
-const currentMonth = today.slice(0,7);
-const api = async <T,>(path:string, init?:RequestInit):Promise<T> => {
-  const res=await fetch(`/api${path}`,{...init,headers:{"Content-Type":"application/json",...(init?.headers||{})}});
-  if(!res.ok) throw new Error((await res.json().catch(()=>({error:"تعذر تنفيذ الطلب"}))).error||"تعذر تنفيذ الطلب");
-  return res.status===204 ? undefined as T : res.json();
-};
-export default function App(){
-  const [lang,setLang]=useState<"ar"|"en">("ar");
-  const [dark,setDark]=useState(true);
-  const [tab,setTab]=useState<"expenses"|"income"|"certificates">("expenses");
-  const [expenses,setExpenses]=useState<Expense[]>([]);
-  const [income,setIncome]=useState<Income[]>([]);
-  const [certificates,setCertificates]=useState<Certificate[]>([]);
-  const [title,setTitle]=useState(""); const [amount,setAmount]=useState(""); const [category,setCategory]=useState("شخصي"); const [date,setDate]=useState(today);
-  const [month,setMonth]=useState(currentMonth); const [salary,setSalary]=useState(""); const [bonuses,setBonuses]=useState(""); const [otherIncome,setOtherIncome]=useState("");
-  const [bankName,setBankName]=useState(""); const [duration,setDuration]=useState(""); const [certAmount,setCertAmount]=useState(""); const [issueDate,setIssueDate]=useState(today); const [maturityDate,setMaturityDate]=useState(today); const [profitDate,setProfitDate]=useState(today); const [profitAmount,setProfitAmount]=useState("");
-  const [notice,setNotice]=useState(""); const [error,setError]=useState("");
-  const t=(ar:string,en:string)=>lang==="ar"?ar:en;
-  const refresh=async()=>{try{const [e,i,c]=await Promise.all([api<Expense[]>("/expenses"),api<Income[]>("/income"),api<Certificate[]>("/certificates")]);setExpenses(e);setIncome(i);setCertificates(c);setError("");}catch(e){setError(e instanceof Error?e.message:"تعذر الاتصال بالخادم");}};
-  useEffect(()=>{void refresh()},[]);
-  const saveExpense=async(e:React.FormEvent)=>{e.preventDefault();try{await api("/expenses",{method:"POST",body:JSON.stringify({title,amount:Number(amount),category,date})});setTitle("");setAmount("");setNotice(t("تم حفظ المصروف","Expense saved"));await refresh()}catch(e){setError(String(e))}};
-  const saveIncome=async(e:React.FormEvent)=>{e.preventDefault();try{await api(`/income/${month}`,{method:"PUT",body:JSON.stringify({salary:Number(salary||0),bonuses:Number(bonuses||0),otherIncome:Number(otherIncome||0)})});setNotice(t("تم حفظ الدخل","Income saved"));await refresh()}catch(e){setError(String(e))}};
-  const saveCertificate=async(e:React.FormEvent)=>{e.preventDefault();try{await api("/certificates",{method:"POST",body:JSON.stringify({bankName,duration,amount:Number(certAmount),issueDate,maturityDate,profitDate,profitAmount:Number(profitAmount||0),profitFrequency:"monthly"})});setBankName("");setDuration("");setCertAmount("");setProfitAmount("");setNotice(t("تم حفظ الشهادة","Certificate saved"));await refresh()}catch(e){setError(String(e))}};
-  const total=expenses.reduce((s,x)=>s+x.amount,0);
-  const downloadBackup=async()=>{try{const data=await api<unknown>("/backup");const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));const a=document.createElement("a");a.href=url;a.download="smartcost-backup.json";a.click();URL.revokeObjectURL(url)}catch(e){setError(String(e))}};
-  const restoreBackup=async(file?:File)=>{if(!file)return;try{const raw=await file.text();const payload=JSON.parse(raw);if(!confirm(t("سيتم استبدال المصروفات والدخل والشهادات الحالية ببيانات النسخة. هل تريد المتابعة؟","Current expenses, income and certificates will be replaced. Continue?")))return;await api("/backup/restore",{method:"POST",body:JSON.stringify(payload)});setNotice(t("تمت استعادة النسخة المالية","Finance backup restored"));await refresh()}catch(e){setError(e instanceof Error?e.message:t("ملف النسخة غير صالح","Invalid backup file"))}};
-  return <main className={dark?"app dark":"app"} dir={lang==="ar"?"rtl":"ltr"}>
-    <header><div><span className="eyebrow">SMART • FINANCE</span><h1>SMARTCOST</h1><p>{t("المصروفات والدخل والشهادات البنكية","Expenses, income and bank certificates")}</p></div><div className="actions"><button onClick={()=>setLang(lang==="ar"?"en":"ar")}>{lang==="ar"?"English":"العربية"}</button><button onClick={()=>setDark(!dark)}>{dark?t("الوضع الفاتح","Light mode"):t("الوضع الداكن","Dark mode")}</button><button onClick={()=>void downloadBackup()}>{t("تصدير نسخة مالية","Export finance backup")}</button><label className="file-button">{t("استعادة نسخة مالية","Restore finance backup")}<input type="file" accept="application/json,.json" onChange={e=>{const file=e.target.files?.[0];void restoreBackup(file);e.currentTarget.value=""}} /></label></div></header>
-    {error&&<div className="alert error">{error}</div>}{notice&&<div className="alert">{notice}</div>}
-    <section className="summary"><article><span>{t("إجمالي المصروفات المسجلة","Recorded expenses")}</span><strong>{total.toLocaleString(lang==="ar"?"ar-EG":"en-US",{maximumFractionDigits:2})}</strong></article><article><span>{t("سجلات الدخل","Income records")}</span><strong>{income.length}</strong></article><article><span>{t("الشهادات البنكية","Bank certificates")}</span><strong>{certificates.length}</strong></article></section>
-    <nav>{(["expenses","income","certificates"] as const).map(x=><button className={tab===x?"selected":""} key={x} onClick={()=>setTab(x)}>{x==="expenses"?t("المصروفات","Expenses"):x==="income"?t("الدخل الشهري","Monthly income"):t("الشهادات","Certificates")}</button>)}</nav>
-    {tab==="expenses"&&<section className="panel"><h2>{t("إضافة مصروف","Add an expense")}</h2><form onSubmit={saveExpense} className="form"><label>{t("الوصف","Title")}<input required value={title} onChange={e=>setTitle(e.target.value)} maxLength={240}/></label><label>{t("المبلغ","Amount")}<input required type="number" min="0" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>{t("التصنيف","Category")}<select value={category} onChange={e=>setCategory(e.target.value)}>{["شخصي","منزلي","عمل","مركبات","تعليم","طبي","أخرى"].map(c=><option key={c}>{c}</option>)}</select></label><label>{t("التاريخ","Date")}<input required type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button className="primary">{t("حفظ المصروف","Save expense")}</button></form><h2>{t("آخر المصروفات","Recent expenses")}</h2><div className="records">{expenses.map(x=><article key={x.id}><div><b>{x.title}</b><small>{x.category} • {x.date}</small></div><strong>{x.amount.toLocaleString()} EGP</strong><button onClick={async()=>{if(confirm(t("حذف المصروف؟","Delete expense?"))){await api(`/expenses/${x.id}`,{method:"DELETE"});await refresh()}}}>{t("حذف","Delete")}</button></article>)}</div></section>}
-    {tab==="income"&&<section className="panel"><h2>{t("الدخل الشهري","Monthly income")}</h2><form onSubmit={saveIncome} className="form"><label>{t("الشهر","Month")}<input type="month" required value={month} onChange={e=>setMonth(e.target.value)}/></label><label>{t("الراتب","Salary")}<input type="number" min="0" step="0.01" value={salary} onChange={e=>setSalary(e.target.value)}/></label><label>{t("المكافآت","Bonuses")}<input type="number" min="0" step="0.01" value={bonuses} onChange={e=>setBonuses(e.target.value)}/></label><label>{t("دخل آخر","Other income")}<input type="number" min="0" step="0.01" value={otherIncome} onChange={e=>setOtherIncome(e.target.value)}/></label><button className="primary">{t("حفظ الدخل","Save income")}</button></form><div className="records">{income.map(x=><article key={x.month}><b>{x.month}</b><strong>{(x.salary+x.bonuses+x.otherIncome).toLocaleString()} EGP</strong></article>)}</div></section>}
-    {tab==="certificates"&&<section className="panel"><h2>{t("إضافة شهادة بنكية","Add bank certificate")}</h2><form onSubmit={saveCertificate} className="form"><label>{t("اسم البنك","Bank name")}<input required value={bankName} onChange={e=>setBankName(e.target.value)}/></label><label>{t("المدة","Duration")}<input required value={duration} onChange={e=>setDuration(e.target.value)}/></label><label>{t("قيمة الشهادة","Amount")}<input required type="number" min="0.01" step="0.01" value={certAmount} onChange={e=>setCertAmount(e.target.value)}/></label><label>{t("تاريخ الإصدار","Issue date")}<input required type="date" value={issueDate} onChange={e=>setIssueDate(e.target.value)}/></label><label>{t("تاريخ الاستحقاق","Maturity date")}<input required type="date" value={maturityDate} onChange={e=>setMaturityDate(e.target.value)}/></label><label>{t("موعد الأرباح","Profit date")}<input required type="date" value={profitDate} onChange={e=>setProfitDate(e.target.value)}/></label><label>{t("قيمة الأرباح","Profit amount")}<input type="number" min="0" step="0.01" value={profitAmount} onChange={e=>setProfitAmount(e.target.value)}/></label><button className="primary">{t("حفظ الشهادة","Save certificate")}</button></form><div className="records">{certificates.map(x=><article key={x.id}><div><b>{x.bankName}</b><small>{x.duration} • {t("استحقاق","Matures")} {x.maturityDate}</small></div><strong>{x.amount.toLocaleString()} EGP</strong><button onClick={async()=>{if(confirm(t("حذف الشهادة؟","Delete certificate?"))){await api(`/certificates/${x.id}`,{method:"DELETE"});await refresh()}}}>{t("حذف","Delete")}</button></article>)}</div></section>}
-    <footer>{t("نسخة أولية للفصل — يلزم نقل واجهة البرنامج الأصلية والتحقق قبل الإنتاج.","Separation scaffold — original UI migration and verification required before production.")}</footer>
-  </main>;
+export default function App() {
+  const [language,setLanguage]=useState<Language>("ar");
+  const [currency,setCurrency]=useState("EGP");
+  const [theme,setTheme]=useState<"light"|"dark">("dark");
+  const [screen,setScreen]=useState<"expenses"|"income">("expenses");
+  return <div className={theme==="dark"?"min-h-screen bg-slate-950 text-slate-100 dark":"min-h-screen bg-slate-50 text-slate-900"} dir={language==="ar"?"rtl":"ltr"}>
+    <header className="sticky top-0 z-40 border-b border-slate-700/30 bg-slate-950/90 text-white backdrop-blur">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div><div className="text-xs font-black tracking-[.24em] text-amber-400">SMART • FINANCE</div><h1 className="text-xl font-black">SMARTCOST</h1></div>
+        <nav className="flex flex-wrap items-center gap-2">
+          <button className="rounded-xl border border-slate-700 px-3 py-2 text-sm" onClick={()=>setScreen("expenses")}>{language==="ar"?"المصروفات":"Expenses"}</button>
+          <button className="rounded-xl border border-slate-700 px-3 py-2 text-sm" onClick={()=>setScreen("income")}>{language==="ar"?"الدخل والشهادات":"Income & certificates"}</button>
+          <button className="rounded-xl border border-slate-700 px-3 py-2 text-sm" onClick={()=>setLanguage(language==="ar"?"en":"ar")}>{language==="ar"?"English":"العربية"}</button>
+          <button className="rounded-xl border border-slate-700 px-3 py-2 text-sm" onClick={()=>setTheme(theme==="dark"?"light":"dark")}>{theme==="dark"?(language==="ar"?"الوضع الفاتح":"Light mode"):(language==="ar"?"الوضع الداكن":"Dark mode")}</button>
+          <select aria-label="Currency" className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm" value={currency} onChange={e=>setCurrency(e.target.value)}><option>EGP</option><option>SAR</option><option>AED</option><option>USD</option><option>EUR</option></select>
+        </nav>
+      </div>
+    </header>
+    <main className="mx-auto max-w-7xl px-3 py-4 sm:px-5">
+      {screen==="expenses"?<ExpensesView language={language} currency={currency}/>:<IncomeCertificatesView language={language} currency={currency}/>}
+    </main>
+    <footer className="mx-auto max-w-7xl px-4 pb-6 text-xs text-slate-500">SMARTCOST — {language==="ar"?"تطبيق مالي مستقل. لا تشارك بياناتك المالية على جهاز عام.":"Standalone finance app. Avoid exposing financial data on shared devices."}</footer>
+  </div>;
 }
