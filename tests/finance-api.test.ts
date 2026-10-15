@@ -41,7 +41,7 @@ before(async () => {
   baseUrl = "http://127.0.0.1:" + port;
   child = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(port), DATABASE_PATH: join(tempDir, "test.sqlite"), CORS_ORIGIN: baseUrl },
+    env: { ...process.env, NODE_ENV: "test", PORT: String(port), DATABASE_PATH: join(tempDir, "test.sqlite"), CORS_ORIGIN: baseUrl },
     stdio: "ignore"
   });
   await waitForHealth();
