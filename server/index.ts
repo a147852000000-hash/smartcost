@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS monthly_income (
   otherIncome REAL NOT NULL DEFAULT 0 CHECK(otherIncome >= 0),
   otherIncomeNote TEXT, detailsJson TEXT, updatedAt TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS car_income_trips (
+  id TEXT PRIMARY KEY, date TEXT NOT NULL, amount REAL NOT NULL CHECK(amount >= 0),
+  tripJson TEXT NOT NULL, createdAt TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS bank_certificates (
   id TEXT PRIMARY KEY, bankName TEXT NOT NULL, certificateNumber TEXT,
   duration TEXT NOT NULL, amount REAL NOT NULL CHECK(amount > 0),
@@ -95,6 +99,22 @@ app.put("/api/income/:month", (req,res) => {
 
 const frequencies = new Set(["monthly","quarterly","semiannual","annual","maturity"]);
 const validCertificate = (b: Record<string,unknown>) => text(b.bankName,160) && text(b.duration,100) && nonnegative(b.amount) && b.amount > 0 && date(b.issueDate) && date(b.maturityDate) && date(b.profitDate) && nonnegative(b.profitAmount) && text(b.profitFrequency,20) && frequencies.has(String(b.profitFrequency)) && (b.certificateNumber===undefined || typeof b.certificateNumber==="string") && (b.notes===undefined || typeof b.notes==="string");
+app.get("/api/car-income", (_req,res) => {
+ const rows=db.prepare("SELECT tripJson FROM car_income_trips ORDER BY date DESC").all() as Array<{tripJson:string}>;
+ res.json(rows.map(row=>{try{return JSON.parse(row.tripJson)}catch{return null}}).filter(Boolean));
+});
+app.put("/api/car-income-sync", (req,res) => {
+ const b=req.body;
+ if(!isObject(b)||!Array.isArray(b.items)||b.items.length>10000)return sendError(res,400,"invalid car income payload");
+ const valid=b.items.every((x:any)=>isObject(x)&&text(x.id,100)&&nonnegative(x.amount)&&date(x.date)&&((typeof x.tripNumber==="string"&&x.tripNumber.length<=100)||typeof x.tripNumber==="number")&&(x.createdAt===undefined||typeof x.createdAt==="string"));
+ if(!valid)return sendError(res,400,"car income validation failed");
+ const tx=db.transaction(()=>{
+  db.prepare("DELETE FROM car_income_trips").run();
+  const stmt=db.prepare("INSERT INTO car_income_trips(id,date,amount,tripJson,createdAt) VALUES(?,?,?,?,?)");
+  for(const x of b.items as any[])stmt.run(x.id,x.date,x.amount,JSON.stringify(x),x.createdAt||now());
+ });
+ try{tx();res.json({ok:true,count:b.items.length})}catch{sendError(res,400,"car income could not be synced")}
+});
 app.get("/api/certificates", (_req,res) => {
  const rows=db.prepare("SELECT * FROM bank_certificates ORDER BY maturityDate").all() as Array<Record<string,unknown>>;
  res.json(rows.map(row=>{try{return row.detailsJson?JSON.parse(String(row.detailsJson)):row}catch{return row}}));
@@ -142,26 +162,30 @@ const backup = () => ({
   exportedAt: now(),
   expenses: db.prepare("SELECT * FROM expenses ORDER BY date").all(),
   income: (db.prepare("SELECT * FROM monthly_income ORDER BY month").all() as Array<Record<string,unknown>>).map(row=>{try{return row.detailsJson?JSON.parse(String(row.detailsJson)):row}catch{return row}}),
-  certificates: (db.prepare("SELECT * FROM bank_certificates ORDER BY maturityDate").all() as Array<Record<string,unknown>>).map(row=>{try{return row.detailsJson?JSON.parse(String(row.detailsJson)):row}catch{return row}})
+  certificates: (db.prepare("SELECT * FROM bank_certificates ORDER BY maturityDate").all() as Array<Record<string,unknown>>).map(row=>{try{return row.detailsJson?JSON.parse(String(row.detailsJson)):row}catch{return row}}),
+  carIncome: (db.prepare("SELECT tripJson FROM car_income_trips ORDER BY date").all() as Array<{tripJson:string}>).map(row=>{try{return JSON.parse(row.tripJson)}catch{return null}}).filter(Boolean)
 });
 app.get("/api/backup", (_req,res) => res.json(backup()));
 app.post("/api/backup/restore", (req,res) => {
   const b=req.body;
-  if (!isObject(b) || b.schemaVersion!==1 || !Array.isArray(b.expenses) || !Array.isArray(b.income) || !Array.isArray(b.certificates) || b.expenses.length>10000 || b.income.length>2400 || b.certificates.length>5000) return sendError(res,400,"invalid backup format");
+  if (!isObject(b) || b.schemaVersion!==1 || !Array.isArray(b.expenses) || !Array.isArray(b.income) || !Array.isArray(b.certificates) || (b.carIncome!==undefined&&!Array.isArray(b.carIncome)) || b.expenses.length>10000 || b.income.length>2400 || b.certificates.length>5000 || (Array.isArray(b.carIncome)&&b.carIncome.length>10000)) return sendError(res,400,"invalid backup format");
   const expenseValid=b.expenses.every((x:any)=>isObject(x)&&text(x.id,100)&&text(x.title)&&nonnegative(x.amount)&&text(x.category,80)&&date(x.date)&&(x.type===undefined||new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]).has(String(x.type)))&&(x.notes===null||x.notes===undefined||typeof x.notes==="string"));
   const incomeValid=b.income.every((x:any)=>isObject(x)&&month(x.month)&&nonnegative(x.salary)&&nonnegative(x.bonuses)&&nonnegative(x.otherIncome));
   const certValid=b.certificates.every((x:any)=>isObject(x)&&text(x.id,100)&&validCertificate(x));
-  if (!expenseValid || !incomeValid || !certValid) return sendError(res,400,"backup validation failed");
+  const carIncomeValid=(b.carIncome??[]).every((x:any)=>isObject(x)&&text(x.id,100)&&nonnegative(x.amount)&&date(x.date));
+  if (!expenseValid || !incomeValid || !certValid || !carIncomeValid) return sendError(res,400,"backup validation failed");
   const restore=db.transaction(() => {
-    db.prepare("DELETE FROM expenses").run(); db.prepare("DELETE FROM monthly_income").run(); db.prepare("DELETE FROM bank_certificates").run();
+    db.prepare("DELETE FROM expenses").run(); db.prepare("DELETE FROM monthly_income").run(); db.prepare("DELETE FROM bank_certificates").run(); db.prepare("DELETE FROM car_income_trips").run();
     const e=db.prepare("INSERT INTO expenses(id,title,amount,type,category,date,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?)");
     for (const x of b.expenses as any[]) e.run(x.id,x.title,x.amount,x.type||"house",x.category,x.date,x.notes??null,x.createdAt||now(),x.updatedAt||now());
     const i=db.prepare("INSERT INTO monthly_income(month,salary,bonuses,otherIncome,otherIncomeNote,detailsJson,updatedAt) VALUES(?,?,?,?,?,?,?)");
     for (const x of b.income as any[]) i.run(x.month,x.salary,x.bonuses,x.otherIncome,x.otherIncomeNote??null,JSON.stringify(x),x.updatedAt||now());
     const c=db.prepare("INSERT INTO bank_certificates(id,bankName,certificateNumber,duration,amount,issueDate,maturityDate,profitDate,profitAmount,profitFrequency,notes,detailsJson,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
     for (const x of b.certificates as any[]) c.run(x.id,x.bankName,x.certificateNumber??null,x.duration,x.amount,x.issueDate,x.maturityDate,x.profitDate,x.profitAmount,x.profitFrequency,x.notes??null,JSON.stringify(x),x.createdAt||now(),x.updatedAt||now());
+    const trip=db.prepare("INSERT INTO car_income_trips(id,date,amount,tripJson,createdAt) VALUES(?,?,?,?,?)");
+    for (const x of (b.carIncome??[]) as any[]) trip.run(x.id,x.date,x.amount,JSON.stringify(x),x.createdAt||now());
   });
-  try { restore(); res.json({ok:true,counts:{expenses:b.expenses.length,income:b.income.length,certificates:b.certificates.length}}); }
+  try { restore(); res.json({ok:true,counts:{expenses:b.expenses.length,income:b.income.length,certificates:b.certificates.length,carIncome:(b.carIncome??[]).length}}); }
   catch { sendError(res,400,"backup could not be restored; no partial changes were kept"); }
 });
 
