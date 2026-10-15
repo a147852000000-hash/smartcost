@@ -18,6 +18,10 @@ Expense type must be one of: `house`, `medical`, `personal`, `student`, `vehicle
 - `GET /api/income`
 - `PUT /api/income/:month` with aggregate values and optional `details` containing the full finance record.
 
+## Vehicle income (financial records)
+- `GET /api/car-income`
+- `PUT /api/car-income-sync` replaces the vehicle-trip income collection after validation.
+
 ## Bank certificates
 - `GET /api/certificates`
 - `POST /api/certificates`
@@ -26,8 +30,8 @@ Expense type must be one of: `house`, `medical`, `personal`, `student`, `vehicle
 - `PUT /api/certificates-sync` replaces the certificate collection transactionally after validation.
 
 ## Backup / restore
-- `GET /api/backup` exports only expenses, monthly income, and bank certificates.
-- `POST /api/backup/restore` validates the complete payload and restores the three collections in one SQLite transaction.
+- `GET /api/backup` exports only expenses, monthly income, vehicle-trip income, and bank certificates.
+- `POST /api/backup/restore` validates the complete payload and restores the finance collections in one SQLite transaction.
 
 ## Deployment gate
 Authentication, authorization, per-user data isolation, rate limiting, and automated runtime/security tests are required before any public deployment. Do not expose the current API publicly.
