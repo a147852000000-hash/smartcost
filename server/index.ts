@@ -81,7 +81,7 @@ app.post("/api/expenses", (req, res) => {
 });
 app.put("/api/expenses/:id", (req, res) => {
   const b = req.body;
-  if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category,80) || !date(b.date) || (b.type !== undefined && !new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]).has(String(b.type))) || (b.notes !== undefined && typeof b.notes !== "string")) return sendError(res,400,"invalid expense");
+  if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category,80) || !date(b.date) || (b.type !== undefined && !new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]).has(String(b.type))) || (b.notes !== undefined && b.notes !== null && typeof b.notes !== "string")) return sendError(res,400,"invalid expense");
   const result = db.prepare("UPDATE expenses SET title=?,amount=?,type=?,category=?,date=?,notes=?,updatedAt=? WHERE id=?").run(b.title.trim(),b.amount,String(b.type || "house"),b.category.trim(),b.date,typeof b.notes==="string"?b.notes.slice(0,2000):null,now(),req.params.id);
   if (!result.changes) return sendError(res,404,"expense not found");
   res.json(db.prepare("SELECT * FROM expenses WHERE id=?").get(req.params.id));
