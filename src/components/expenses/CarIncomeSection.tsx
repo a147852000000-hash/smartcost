@@ -29,7 +29,7 @@ interface CarIncomeSectionProps {
   onSyncWithMonthlyIncome?: (trips: CarTripIncomeRecord[]) => void;
 }
 
-const STORAGE_KEY = 'smart_time_car_income_trips';
+const STORAGE_KEY = 'smartcost_car_income_trips';
 
 const TRIP_TYPES = [
   { id: 'cash', label: 'كاش 💵' },
@@ -74,43 +74,8 @@ export const CarIncomeSection: React.FC<CarIncomeSectionProps> = ({
   };
 
   // State: List of all car trips
-  const [trips, setTrips] = useState<CarTripIncomeRecord[]>(() => {
-    return StorageAdapter.getItem<CarTripIncomeRecord[]>(STORAGE_KEY, [
-      {
-        id: 'trip_1',
-        tripNumber: 'رحلة 1',
-        amount: 85,
-        date: `${selectedMonth}-01`,
-        dayName: 'الأحد',
-        time: '09:30',
-        tripType: 'أوبر Uber',
-        notes: 'مشوار من مدينة نصر إلى التجمع الخامس',
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'trip_2',
-        tripNumber: 'رحلة 2',
-        amount: 120,
-        date: `${selectedMonth}-01`,
-        dayName: 'الأحد',
-        time: '12:15',
-        tripType: 'إندرايف inDrive',
-        notes: 'مشوار من المعادي إلى مصر الجديدة',
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'trip_3',
-        tripNumber: 'رحلة 3',
-        amount: 150,
-        date: `${selectedMonth}-02`,
-        dayName: 'الإثنين',
-        time: '16:45',
-        tripType: 'مشوار خاص 🚘',
-        notes: 'توصيل مطار القاهرة الدولي',
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-  });
+  const [trips, setTrips] = useState<CarTripIncomeRecord[]>(() => StorageAdapter.getItem<CarTripIncomeRecord[]>(STORAGE_KEY, []));
+  const [serverLoaded, setServerLoaded] = useState(false);
 
   // Active view: 'entry' (تسجيل الرحلات) | 'report' (تقرير ومعاينة الدخل)
   const [activeSubTab, setActiveSubTab] = useState<'entry' | 'report'>('entry');
@@ -140,13 +105,27 @@ export const CarIncomeSection: React.FC<CarIncomeSectionProps> = ({
   const [reportFilterType, setReportFilterType] = useState<string>('all');
   const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
 
-  // Persist trips to storage whenever changed
+  useEffect(() => {
+    void fetch("/api/car-income").then(async response => {
+      if (response.ok) {
+        const serverTrips = await response.json() as CarTripIncomeRecord[];
+        if (Array.isArray(serverTrips) && serverTrips.length > 0) {
+          setTrips(serverTrips);
+          StorageAdapter.setItem(STORAGE_KEY, serverTrips);
+        } else if (trips.length > 0) {
+          void fetch("/api/car-income-sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: trips }) }).catch(() => {});
+        }
+      }
+    }).catch(() => {}).finally(() => setServerLoaded(true));
+  }, []);
+
   useEffect(() => {
     StorageAdapter.setItem(STORAGE_KEY, trips);
-    if (onSyncWithMonthlyIncome) {
-      onSyncWithMonthlyIncome(trips);
+    if (serverLoaded) {
+      void fetch("/api/car-income-sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: trips }) }).catch(() => {});
     }
-  }, [trips, onSyncWithMonthlyIncome]);
+    if (onSyncWithMonthlyIncome) onSyncWithMonthlyIncome(trips);
+  }, [trips, onSyncWithMonthlyIncome, serverLoaded]);
 
   // Next recommended trip number
   const nextTripNumberName = useMemo(() => {
