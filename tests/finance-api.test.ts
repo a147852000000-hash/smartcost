@@ -96,7 +96,7 @@ test("income details and certificate collection persist and appear in finance-on
   assert.ok(carList.body.some((row: any) => row.id === "trip_test"));
   const updatedBackup = await json("/api/backup");
   assert.ok(updatedBackup.body.carIncome.some((row: any) => row.id === "trip_test"));
-  const restored = await json("/api/backup/restore", { method: "POST", body: JSON.stringify(backup.body) });
+  const restored = await json("/api/backup/restore", { method: "POST", body: JSON.stringify(updatedBackup.body) });
   assert.equal(restored.response.status, 200);
   assert.equal(restored.body.ok, true);
   assert.equal(restored.body.counts.certificates, 1);
