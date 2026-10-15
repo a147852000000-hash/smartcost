@@ -89,4 +89,8 @@ test("income details and certificate collection persist and appear in finance-on
   assert.deepEqual(Object.keys(backup.body).sort(), ["certificates", "exportedAt", "expenses", "income", "schemaVersion"].sort());
   assert.ok(backup.body.income.some((row: any) => row.id === "income_test"));
   assert.ok(backup.body.certificates.some((row: any) => row.id === "cert_test"));
+  const restored = await json("/api/backup/restore", { method: "POST", body: JSON.stringify(backup.body) });
+  assert.equal(restored.response.status, 200);
+  assert.equal(restored.body.ok, true);
+  assert.equal(restored.body.counts.certificates, 1);
 });
