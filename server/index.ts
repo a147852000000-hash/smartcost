@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const app = express();
@@ -165,5 +165,13 @@ app.post("/api/backup/restore", (req,res) => {
   catch { sendError(res,400,"backup could not be restored; no partial changes were kept"); }
 });
 
-// Intentionally bind to loopback by default. Add authentication before any public deployment.
-app.listen(port, "127.0.0.1", () => console.log(`smartcost API listening on 127.0.0.1:${port}`));
+// Serve the built UI when present. The API stays loopback-bound; add authentication before public exposure.
+const webRoot = resolve("dist");
+if (existsSync(resolve(webRoot, "index.html"))) {
+  app.use(express.static(webRoot));
+  app.get("*", (req,res,next) => {
+    if (req.path.startsWith("/api/")) return next();
+    res.sendFile(resolve(webRoot, "index.html"));
+  });
+}
+app.listen(port, "127.0.0.1", () => console.log(`smartcost service listening on 127.0.0.1:${port}`));
