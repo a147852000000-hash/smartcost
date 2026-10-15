@@ -18,7 +18,16 @@ export async function createCanonicalFinanceExpense(input:CanonicalExpenseInput)
  return request("/api/expenses",{method:"POST",body:JSON.stringify({...input,title:input.title||input.category||input.type,category:input.category||input.type})});
 }
 export async function updateCanonicalFinanceExpense(id:string,patch:Partial<CanonicalExpenseInput>):Promise<Record<string,unknown>>{
- return request("/api/expenses/"+encodeURIComponent(id),{method:"PUT",body:JSON.stringify(patch)});
+ const rows=await getAllExpenses();
+ const current=rows.find(row=>String(row.id)===id);
+ if(!current)throw new Error("المصروف غير موجود.");
+ const merged={...current,...patch};
+ return request("/api/expenses/"+encodeURIComponent(id),{method:"PUT",body:JSON.stringify({
+   id, title:String(merged.title||merged.category||merged.type||"مصروف"),
+   amount:Number(merged.amount)||0, type:String(merged.type||"house"),
+   category:String(merged.category||merged.type||"house"), date:String(merged.date||"").slice(0,10),
+   notes:merged.notes==null?null:String(merged.notes)
+ })});
 }
 export async function deleteCanonicalFinanceExpense(id:string):Promise<void>{
  const res=await fetch("/api/expenses/"+encodeURIComponent(id),{method:"DELETE"});
