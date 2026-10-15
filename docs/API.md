@@ -1,35 +1,33 @@
 # SMARTCOST API
 
-All routes are prefixed with `/api`. JSON request and response bodies use UTF-8. This is an initial contract; authorization and per-user data isolation must be implemented before exposing the service to the internet.
+All endpoints use JSON and the `/api` prefix. This API is for local development only until authentication and per-user ownership are implemented.
 
 ## Health
-- `GET /api/health` — liveness only; no secrets or database contents.
+- `GET /api/health`
 
 ## Expenses
+- `GET /api/expenses`
 - `GET /api/expenses?month=YYYY-MM`
 - `POST /api/expenses`
 - `PUT /api/expenses/:id`
 - `DELETE /api/expenses/:id`
 
-Expense records: `id`, `title`, `amount`, `category`, `date`, optional `notes`, `createdAt`, `updatedAt`.
+Expense type must be one of: `house`, `medical`, `personal`, `student`, `vehicle_fuel`, `vehicle_maint`, `vehicle_oil`, `work`.
 
-## Monthly income
+## Income
 - `GET /api/income`
-- `PUT /api/income/:month` — upsert one monthly record.
-
-Fields: `month`, `salary`, `bonuses`, `otherIncome`, optional `otherIncomeNote`.
+- `PUT /api/income/:month` with aggregate values and optional `details` containing the full finance record.
 
 ## Bank certificates
 - `GET /api/certificates`
 - `POST /api/certificates`
 - `PUT /api/certificates/:id`
 - `DELETE /api/certificates/:id`
+- `PUT /api/certificates-sync` replaces the certificate collection transactionally after validation.
 
-Fields include bank name, optional certificate number, duration, amount, issue/maturity/profit dates, profit amount/frequency, and optional notes.
-
-## Backup
+## Backup / restore
 - `GET /api/backup` exports only expenses, monthly income, and bank certificates.
-- `POST /api/backup/restore` validates the entire payload before replacing these three financial collections in a single database transaction.
+- `POST /api/backup/restore` validates the complete payload and restores the three collections in one SQLite transaction.
 
-## Security gate before deployment
-This initial scaffold has no authentication yet. Do not expose personal financial endpoints publicly until authentication, authorization, input validation, rate limits, and per-user ownership boundaries are implemented and tested.
+## Deployment gate
+Authentication, authorization, per-user data isolation, rate limiting, and automated runtime/security tests are required before any public deployment. Do not expose the current API publicly.
