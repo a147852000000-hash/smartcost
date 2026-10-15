@@ -82,7 +82,7 @@ app.put("/api/income/:month", (req,res) => {
 });
 
 const frequencies = new Set(["monthly","quarterly","semiannual","annual","maturity"]);
-const validCertificate = (b: Record<string,unknown>) => text(b.bankName,160) && text(b.duration,100) && nonnegative(b.amount) && b.amount > 0 && date(b.issueDate) && date(b.maturityDate) && date(b.profitDate) && nonnegative(b.profitAmount) && text(b.profitFrequency,20) && frequencies.has(String(b.profitFrequency)) && (b.certificateNumber===undefined || typeof b.certificateNumber==="string") && (b.notes===undefined || typeof b.notes==="string");
+const validCertificate = (b: Record<string,unknown>) => text(b.bankName,160) && text(b.duration,100) && nonnegative(b.amount) && b.amount > 0 && date(b.issueDate) && date(b.maturityDate) && date(b.profitDate) && nonnegative(b.profitAmount) && text(b.profitFrequency,20) && frequencies.has(String(b.profitFrequency)) && (b.certificateNumber===undefined || b.certificateNumber===null || typeof b.certificateNumber==="string") && (b.notes===undefined || b.notes===null || typeof b.notes==="string");
 app.get("/api/car-income", (_req,res) => {
  const rows=db.prepare("SELECT tripJson FROM car_income_trips ORDER BY date DESC").all() as Array<{tripJson:string}>;
  res.json(rows.map(row=>{try{return JSON.parse(row.tripJson)}catch{return null}}).filter(Boolean));
