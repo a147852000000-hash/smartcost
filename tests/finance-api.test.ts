@@ -86,11 +86,19 @@ test("income details and certificate collection persist and appear in finance-on
 
   const backup = await json("/api/backup");
   assert.equal(backup.response.status, 200);
-  assert.deepEqual(Object.keys(backup.body).sort(), ["certificates", "exportedAt", "expenses", "income", "schemaVersion"].sort());
+  assert.deepEqual(Object.keys(backup.body).sort(), ["carIncome", "certificates", "exportedAt", "expenses", "income", "schemaVersion"].sort());
   assert.ok(backup.body.income.some((row: any) => row.id === "income_test"));
   assert.ok(backup.body.certificates.some((row: any) => row.id === "cert_test"));
+  const carTrip = { id: "trip_test", tripNumber: "1", amount: 200, date: "2026-10-15", createdAt: new Date().toISOString() };
+  const carSync = await json("/api/car-income-sync", { method: "PUT", body: JSON.stringify({ items: [carTrip] }) });
+  assert.equal(carSync.response.status, 200);
+  const carList = await json("/api/car-income");
+  assert.ok(carList.body.some((row: any) => row.id === "trip_test"));
+  const updatedBackup = await json("/api/backup");
+  assert.ok(updatedBackup.body.carIncome.some((row: any) => row.id === "trip_test"));
   const restored = await json("/api/backup/restore", { method: "POST", body: JSON.stringify(backup.body) });
   assert.equal(restored.response.status, 200);
   assert.equal(restored.body.ok, true);
   assert.equal(restored.body.counts.certificates, 1);
+  assert.equal(restored.body.counts.carIncome, 1);
 });
