@@ -43,3 +43,127 @@ export interface CarTripIncomeRecord {
 export interface UserProfile {
   vehiclePreferences?: { vehicleType?:string; primaryVehicleName?:string; vehicleShape?:string };
 }
+
+
+// Chat types migrated from SMART-TIME for unified preview.
+export interface ChatRoom {
+  id: string;
+  title?: string;
+  name?: string;
+  description?: string;
+  type: 'public' | 'direct' | 'group';
+  avatar: string;
+  creatorId?: string;
+  lastMessage?: string;
+  lastMessageTime?: string;
+  unreadCount: number;
+  membersCount?: number;
+  isOnline?: boolean;
+  background?: string;
+  backgroundUrl?: string;
+  avatarUrl?: string;
+  members?: ChatMember[];
+  permissions?: ChatRoomPermissions;
+  adminPermissions?: ChatRoomPermissions;
+  moderatorPermissions?: ChatRoomPermissions;
+  settings?: ChatRoomSettings;
+  inviteLink?: string;
+  pinned?: boolean;
+  currentUserRole?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  roomId?: string;
+  conversationId?: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  text: string;
+  body?: string;
+  mediaUrl?: string;
+  type?: 'text' | 'image' | 'video' | 'voice' | 'file' | 'location' | 'poll';
+  status?: 'sent' | 'delivered' | 'read';
+  isOutgoing?: boolean;
+  isPinned?: boolean;
+  pinnedBy?: string;
+  pinnedAt?: string;
+  isEdited?: boolean;
+  isDeleted?: boolean;
+  isSaved?: boolean;
+  timestamp: string;
+  createdAt?: string;
+  updatedAt?: string;
+  location?: {
+    lat: number;
+    lng: number;
+    isLive?: boolean;
+  };
+  poll?: {
+    question: string;
+    options: string[];
+    votes: Record<number, string[]>;
+    multiple?: boolean;
+  };
+}
+
+export interface ChatMember {
+  id: string;
+  name: string;
+  avatar: string;
+  phone?: string;
+  role: 'owner' | 'admin' | 'moderator' | 'member';
+  joinedAt?: string;
+  isOnline?: boolean;
+  lastSeenAt?: string;
+  muted?: boolean;
+  banned?: boolean;
+}
+
+export interface ChatRoomPermissions {
+  sendMessages: boolean;
+  sendMedia: boolean;
+  addMembers: boolean;
+  pinMessages: boolean;
+  editRoom: boolean;
+  deleteMessages: boolean;
+  startCalls: boolean;
+  mentionEveryone: boolean;
+}
+
+export interface ChatRoomSettings {
+  disappearing: 'off' | '24h' | '7d' | '90d';
+  muted: boolean;
+  readReceipts: boolean;
+  typingIndicator: boolean;
+  linkPreviews: boolean;
+  mediaAutoSave: boolean;
+  enterToSend: boolean;
+  slowModeSeconds: 0 | 10 | 30 | 60 | 300;
+  approvalRequired: boolean;
+}
+
+export interface SavedMessageItem {
+  id: string;
+  roomId: string;
+  roomTitle: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  text: string;
+  body?: string;
+  mediaUrl?: string;
+  type?: string;
+  savedAt: string;
+  timestamp: string;
+}
+
+
+// ---------------------------
+// 11. MEDIA & PDF / OCR
+// ---------------------------
+
+export type ThemeMode = "light" | "dark";
+export type IconStyle = "classic" | "soft" | "bold" | "glow";

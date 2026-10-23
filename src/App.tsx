@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { ExpensesView } from "./components/ExpensesView";
 import { IncomeCertificatesView } from "./components/IncomeCertificatesView";
-import type { Language } from "./types";
+import type { Language, ThemeMode } from "./types";
+import { MessageCircle } from "lucide-react";
+const HotChatView = lazy(() => import("./components/HotChatView").then((m) => ({ default: m.HotChatView })));
 
 export default function App() {
   const [language,setLanguage]=useState<Language>("ar");
   const [currency,setCurrency]=useState("EGP");
   const [theme,setTheme]=useState<"light"|"dark">("dark");
-  const [screen,setScreen]=useState<"expenses"|"income">("expenses");
+  const [screen,setScreen]=useState<"expenses"|"income"|"chat">("expenses");
   const [backupNotice,setBackupNotice]=useState("");
   const [backupError,setBackupError]=useState("");
   const exportFinanceBackup=async()=>{
@@ -39,6 +41,7 @@ export default function App() {
         <nav className="flex flex-wrap items-center gap-2">
           <button className="rounded-xl border border-slate-700 px-3 py-2 text-sm" onClick={()=>setScreen("expenses")}>{language==="ar"?"المصروفات":"Expenses"}</button>
           <button className="rounded-xl border border-slate-700 px-3 py-2 text-sm" onClick={()=>setScreen("income")}>{language==="ar"?"الدخل والشهادات":"Income & certificates"}</button>
+          <button className="rounded-xl border border-amber-500/40 px-3 py-2 text-sm" onClick={()=>setScreen("chat")}><MessageCircle className="inline h-4 w-4 me-1"/>{language==="ar"?"الشات":"Chat"}</button>
           <button className="rounded-xl border border-slate-700 px-3 py-2 text-sm" onClick={()=>void exportFinanceBackup()}>{language==="ar"?"تصدير نسخة مالية":"Export finance backup"}</button>
           <label className="cursor-pointer rounded-xl border border-slate-700 px-3 py-2 text-sm">{language==="ar"?"استعادة نسخة":"Restore backup"}<input className="sr-only" type="file" accept=".json,application/json" onChange={e=>{const file=e.target.files?.[0];void importFinanceBackup(file);e.currentTarget.value="";}} /></label>
           <button className="rounded-xl border border-slate-700 px-3 py-2 text-sm" onClick={()=>setLanguage(language==="ar"?"en":"ar")}>{language==="ar"?"English":"العربية"}</button>
@@ -49,7 +52,7 @@ export default function App() {
     </header>
     {(backupNotice||backupError)&&<div role="status" className={backupError?"mx-auto max-w-7xl px-4 py-2 text-sm text-rose-300":"mx-auto max-w-7xl px-4 py-2 text-sm text-emerald-300"}>{backupError||backupNotice}</div>}
     <main className="mx-auto max-w-7xl px-3 py-4 sm:px-5">
-      {screen==="expenses"?<ExpensesView language={language} currency={currency}/>:<IncomeCertificatesView language={language} currency={currency}/>}
+      {screen==="expenses"?<ExpensesView language={language} currency={currency}/>:screen==="income"?<IncomeCertificatesView language={language} currency={currency}/>:<Suspense fallback={<div className="p-8 text-center text-slate-400">{language==="ar"?"جارٍ تحميل الشات...":"Loading chat..."}</div>}><HotChatView language={language} theme={theme as ThemeMode} onNavigateHome={()=>setScreen("expenses")}/></Suspense>}
     </main>
     <footer className="mx-auto max-w-7xl px-4 pb-6 text-xs text-slate-500">SMARTCOST — {language==="ar"?"تطبيق مالي مستقل. لا تشارك بياناتك المالية على جهاز عام.":"Standalone finance app. Avoid exposing financial data on shared devices."}</footer>
   </div>;
