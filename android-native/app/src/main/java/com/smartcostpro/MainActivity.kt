@@ -92,7 +92,7 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
     var selectedType by remember(month) { mutableStateOf("all") }
     var filterExpanded by remember { mutableStateOf(false) }
     val visibleExpenses = remember(expenses, selectedType) {
-        if (selectedType == "all") expenses else expenses.filter { it.type == selectedType }
+        FinanceCalculations.filterExpenses(expenses, selectedType)
     }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
