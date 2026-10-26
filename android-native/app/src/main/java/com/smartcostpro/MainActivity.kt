@@ -87,11 +87,38 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
         recent.forEach { item -> ExpenseRow(item,{ onEdit(item) },{}) }
     }
 }
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun ExpensesScreen(month:String,expenses:List<ExpenseRecord>,onAdd:()->Unit,onEdit:(ExpenseRecord)->Unit,onDelete:(Long)->Unit) {
+    var selectedType by remember(month) { mutableStateOf("all") }
+    var filterExpanded by remember { mutableStateOf(false) }
+    val visibleExpenses = remember(expenses, selectedType) {
+        if (selectedType == "all") expenses else expenses.filter { it.type == selectedType }
+    }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) { Text("مصروفات $month",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold); Text(FinanceCalculations.money(expenses.sumOf { it.amount }),color=MaterialTheme.colorScheme.primary) }
-        if(expenses.isEmpty()) Text("لا توجد مصروفات لهذا الشهر",modifier=Modifier.padding(8.dp))
-        LazyColumn(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=12.dp)) { items(expenses,key={it.id}) { item -> ExpenseRow(item,{ onEdit(item) },{ onDelete(item.id) }) } }
+        Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+            Text("مصروفات $month",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
+            Text(FinanceCalculations.money(visibleExpenses.sumOf { it.amount }),color=MaterialTheme.colorScheme.primary)
+        }
+        ExposedDropdownMenuBox(expanded=filterExpanded,onExpandedChange={filterExpanded=!filterExpanded}) {
+            OutlinedTextField(
+                value = if (selectedType == "all") "كل الأقسام" else FinanceSection.entries.firstOrNull { it.type == selectedType }?.label ?: "كل الأقسام",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("تصفية حسب القسم") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(filterExpanded) },
+                modifier = Modifier.menuAnchor().fillMaxWidth()
+            )
+            ExposedDropdownMenu(expanded=filterExpanded,onDismissRequest={filterExpanded=false}) {
+                DropdownMenuItem(text={Text("كل الأقسام")},onClick={selectedType="all";filterExpanded=false})
+                FinanceSection.entries.forEach { section ->
+                    DropdownMenuItem(text={Text(section.label)},onClick={selectedType=section.type;filterExpanded=false})
+                }
+            }
+        }
+        if(visibleExpenses.isEmpty()) Text(if (selectedType == "all") "لا توجد مصروفات لهذا الشهر" else "لا توجد مصروفات في القسم المحدد",modifier=Modifier.padding(8.dp))
+        LazyColumn(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=12.dp)) {
+            items(visibleExpenses,key={it.id}) { item -> ExpenseRow(item,{ onEdit(item) },{ onDelete(item.id) }) }
+        }
         Button(onClick=onAdd,modifier=Modifier.fillMaxWidth()) { Text("إضافة مصروف") }
     }
 }
