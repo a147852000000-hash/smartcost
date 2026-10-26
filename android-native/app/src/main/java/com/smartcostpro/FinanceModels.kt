@@ -30,6 +30,8 @@ data class CertificateProfit(val annual: Double, val periodic: Double, val month
 
 object FinanceCalculations {
     fun currentMonth(): String = YearMonth.now().toString()
+    fun filterExpenses(expenses: List<ExpenseRecord>, type: String?): List<ExpenseRecord> =
+        if (type.isNullOrBlank() || type == "all") expenses else expenses.filter { it.type == type }
     fun money(value: Double, currency: String = "EGP"): String = String.format(Locale.US, "%,.2f %s", value, currency)
     fun isInMonth(date: String, month: String): Boolean = date.take(7) == month
     fun durationYears(duration: String): Double {
