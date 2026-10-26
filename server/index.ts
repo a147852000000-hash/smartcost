@@ -153,10 +153,10 @@ app.get("/api/backup", (_req,res) => res.json(backup()));
 app.post("/api/backup/restore", (req,res) => {
   const b=req.body;
   if (!isObject(b) || b.schemaVersion!==1 || !Array.isArray(b.expenses) || !Array.isArray(b.income) || !Array.isArray(b.certificates) || (b.carIncome!==undefined&&!Array.isArray(b.carIncome)) || (b.expenses as unknown[]).length>10000 || (b.income as unknown[]).length>2400 || (b.certificates as unknown[]).length>5000 || (Array.isArray(b.carIncome)&&(b.carIncome as unknown[]).length>10000)) return sendError(res,400,"invalid backup format");
-  const expenseValid=b.expenses.every((x:any)=>isObject(x)&&text(x.id,100)&&text(x.title)&&nonnegative(x.amount)&&text(x.category,80)&&date(x.date)&&(x.type===undefined||new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]).has(String(x.type)))&&(x.notes===null||x.notes===undefined||typeof x.notes==="string"));
-  const incomeValid=b.income.every((x:any)=>isObject(x)&&month(x.month)&&nonnegative(x.salary)&&nonnegative(x.bonuses)&&nonnegative(x.otherIncome));
-  const certValid=b.certificates.every((x:any)=>isObject(x)&&text(x.id,100)&&validCertificate(x));
-  const carIncomeValid=(b.carIncome??[]).every((x:any)=>isObject(x)&&text(x.id,100)&&nonnegative(x.amount)&&date(x.date));
+  const expenseValid=(b.expenses as unknown[]).every((x:any)=>isObject(x)&&text(x.id,100)&&text(x.title)&&nonnegative(x.amount)&&text(x.category,80)&&date(x.date)&&(x.type===undefined||new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]).has(String(x.type)))&&(x.notes===null||x.notes===undefined||typeof x.notes==="string"));
+  const incomeValid=(b.income as unknown[]).every((x:any)=>isObject(x)&&month(x.month)&&nonnegative(x.salary)&&nonnegative(x.bonuses)&&nonnegative(x.otherIncome));
+  const certValid=(b.certificates as unknown[]).every((x:any)=>isObject(x)&&text(x.id,100)&&validCertificate(x));
+  const carIncomeValid=((b.carIncome??[]) as unknown[]).every((x:any)=>isObject(x)&&text(x.id,100)&&nonnegative(x.amount)&&date(x.date));
   if (!expenseValid || !incomeValid || !certValid || !carIncomeValid) return sendError(res,400,"backup validation failed");
   const restore=db.transaction(() => {
     db.prepare("DELETE FROM expenses").run(); db.prepare("DELETE FROM monthly_income").run(); db.prepare("DELETE FROM bank_certificates").run(); db.prepare("DELETE FROM car_income_trips").run();
@@ -169,7 +169,7 @@ app.post("/api/backup/restore", (req,res) => {
     const trip=db.prepare("INSERT INTO car_income_trips(id,date,amount,tripJson,createdAt) VALUES(?,?,?,?,?)");
     for (const x of (b.carIncome??[]) as any[]) trip.run(x.id,x.date,x.amount,JSON.stringify(x),x.createdAt||now());
   });
-  try { restore(); res.json({ok:true,counts:{expenses:b.expenses.length,income:b.income.length,certificates:b.certificates.length,carIncome:(b.carIncome??[]).length}}); }
+  try { restore(); res.json({ok:true,counts:{expenses:(b.expenses as unknown[]).length,income:(b.income as unknown[]).length,certificates:(b.certificates as unknown[]).length,carIncome:((b.carIncome??[]) as unknown[]).length}}); }
   catch { sendError(res,400,"backup could not be restored; no partial changes were kept"); }
 });
 
