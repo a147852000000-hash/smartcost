@@ -1,6 +1,7 @@
 package com.smartcostpro
 
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -176,6 +177,7 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
     }
 }
 @Composable private fun ReportsScreen(month:String,income:Double,profit:Double,expenses:List<ExpenseRecord>,balance:Double,certificateValue:Double) {
+    val context = LocalContext.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         Text("التقرير المالي • $month",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
         MetricCard("إجمالي الدخل الأساسي",FinanceCalculations.money(income),Modifier.fillMaxWidth())
@@ -188,6 +190,17 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
             Row(Modifier.fillMaxWidth().padding(vertical=5.dp),horizontalArrangement=Arrangement.SpaceBetween) { Text(section.label); Text(FinanceCalculations.money(expenses.filter { it.type==section.type }.sumOf { it.amount }),color=MaterialTheme.colorScheme.primary) }
             HorizontalDivider()
         }
+        Button(onClick = {
+            val csv = buildString {
+                appendLine("date,title,type,category,amount,payment_method,notes")
+                expenses.forEach { item ->
+                    fun cell(value: String) = "\\\"$\\{value.replace("\\\"","\\\"\\\"")}\\\""
+                    appendLine(listOf(item.date,cell(item.title),cell(item.type),cell(item.category),item.amount.toString(),cell(item.paymentMethod),cell(item.notes)).joinToString(","))
+                }
+            }
+            val intent = Intent(Intent.ACTION_SEND).apply { type = "text/csv"; putExtra(Intent.EXTRA_SUBJECT, "SMART-COST $month"); putExtra(Intent.EXTRA_TEXT, csv) }
+            context.startActivity(Intent.createChooser(intent, "تصدير تقرير المصروفات"))
+        }, modifier = Modifier.fillMaxWidth()) { Text("تصدير المصروفات CSV") }
         Text("تُحفظ البيانات محليًا على الجهاز باستخدام SQLite.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
