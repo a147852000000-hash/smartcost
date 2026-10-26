@@ -36,6 +36,7 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
     var month by remember { mutableStateOf(FinanceCalculations.currentMonth()) }
     var refresh by remember { mutableIntStateOf(0) }
     var showAddExpense by remember { mutableStateOf(false) }
+    var editingExpense by remember { mutableStateOf<ExpenseRecord?>(null) }
     var message by remember { mutableStateOf("") }
     val expenses = remember(month, refresh) { db.expenses(month) }
     val incomes = remember(refresh) { db.incomes() }
@@ -53,26 +54,28 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
             MainTab.INCOME -> Icons.Default.Payments; MainTab.CERTIFICATES -> Icons.Default.AccountBalance
             MainTab.REPORTS -> Icons.Default.BarChart
         }, contentDescription = item.title) }, label = { Text(item.title) })
-    } } }, floatingActionButton = { if (tab == MainTab.EXPENSES || tab == MainTab.DASHBOARD) FloatingActionButton(onClick = { showAddExpense = true }) { Icon(Icons.Default.Add, "إضافة مصروف") } }) { padding ->
+    } } }, floatingActionButton = { if (tab == MainTab.EXPENSES || tab == MainTab.DASHBOARD) FloatingActionButton(onClick = { editingExpense = null; showAddExpense = true }) { Icon(Icons.Default.Add, "إضافة مصروف") } }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
             if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(vertical = 6.dp))
             when(tab) {
-                MainTab.DASHBOARD -> DashboardScreen(month,income,certProfit,expenseTotal,balance,expenses.take(5)) { tab = MainTab.EXPENSES }
-                MainTab.EXPENSES -> ExpensesScreen(month,expenses,{ showAddExpense = true },{ db.deleteExpense(it); refresh++; message = "تم حذف المصروف" })
+                MainTab.DASHBOARD -> DashboardScreen(month,income,certProfit,expenseTotal,balance,expenses.take(5),{ tab = MainTab.EXPENSES },{ editingExpense = it; showAddExpense = true })
+                MainTab.EXPENSES -> ExpensesScreen(month,expenses,{ editingExpense = null; showAddExpense = true },{ editingExpense = it; showAddExpense = true },{ db.deleteExpense(it); refresh++; message = "تم حذف المصروف" })
                 MainTab.INCOME -> IncomeScreen(month,incomes,{ db.saveIncome(it); refresh++; message = "تم حفظ الدخل الشهري" })
                 MainTab.CERTIFICATES -> CertificatesScreen(certificates,month,{ db.addCertificate(it); refresh++; message = "تم حفظ الشهادة" },{ db.deleteCertificate(it); refresh++; message = "تم حذف الشهادة" })
                 MainTab.REPORTS -> ReportsScreen(month,income,certProfit,expenses,balance,certificates.sumOf { it.amount })
             }
         }
     }
-    if (showAddExpense) AddExpenseDialog(onDismiss = { showAddExpense = false }, onSave = { item ->
-        runCatching { db.addExpense(item) }.onSuccess { showAddExpense = false; refresh++; message = "تم حفظ المصروف" }.onFailure { message = it.message ?: "تعذر حفظ المصروف" }
+    if (showAddExpense) AddExpenseDialog(initial = editingExpense, onDismiss = { showAddExpense = false; editingExpense = null }, onSave = { item ->
+        runCatching { if (item.id > 0) db.updateExpense(item) else db.addExpense(item) }
+            .onSuccess { showAddExpense = false; editingExpense = null; refresh++; message = if (item.id > 0) "تم تحديث المصروف" else "تم حفظ المصروف" }
+            .onFailure { message = it.message ?: "تعذر حفظ المصروف" }
     })
 }
 @Composable private fun MetricCard(title: String,value: String,modifier: Modifier = Modifier) {
     ElevatedCard(modifier) { Column(Modifier.padding(14.dp)) { Text(title,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(6.dp)); Text(value,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) } }
 }
-@Composable private fun DashboardScreen(month:String,income:Double,profit:Double,expenses:Double,balance:Double,recent:List<ExpenseRecord>,onOpen:()->Unit) {
+@Composable private fun DashboardScreen(month:String,income:Double,profit:Double,expenses:Double,balance:Double,recent:List<ExpenseRecord>,onOpen:()->Unit,onEdit:(ExpenseRecord)->Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(8.dp)); Text("ملخص الشهر",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold); Text(month,color=MaterialTheme.colorScheme.primary)
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { MetricCard("الدخل الأساسي",FinanceCalculations.money(income),Modifier.weight(1f)); MetricCard("أرباح الشهادات",FinanceCalculations.money(profit),Modifier.weight(1f)) }
@@ -80,29 +83,29 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
         Button(onClick=onOpen,modifier=Modifier.fillMaxWidth()) { Text("فتح المصروفات") }
         Text("أحدث المصروفات",fontWeight=FontWeight.Bold)
         if(recent.isEmpty()) Text("لا توجد مصروفات مسجلة لهذا الشهر")
-        recent.forEach { ExpenseRow(it,{}) }
+        recent.forEach { item -> ExpenseRow(item,{ onEdit(item) },{}) }
     }
 }
-@Composable private fun ExpensesScreen(month:String,expenses:List<ExpenseRecord>,onAdd:()->Unit,onDelete:(Long)->Unit) {
+@Composable private fun ExpensesScreen(month:String,expenses:List<ExpenseRecord>,onAdd:()->Unit,onEdit:(ExpenseRecord)->Unit,onDelete:(Long)->Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) { Text("مصروفات $month",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold); Text(FinanceCalculations.money(expenses.sumOf { it.amount }),color=MaterialTheme.colorScheme.primary) }
         if(expenses.isEmpty()) Text("لا توجد مصروفات لهذا الشهر",modifier=Modifier.padding(8.dp))
-        LazyColumn(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=12.dp)) { items(expenses,key={it.id}) { item -> ExpenseRow(item) { onDelete(item.id) } } }
+        LazyColumn(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=12.dp)) { items(expenses,key={it.id}) { item -> ExpenseRow(item,{ onEdit(item) },{ onDelete(item.id) }) } }
         Button(onClick=onAdd,modifier=Modifier.fillMaxWidth()) { Text("إضافة مصروف") }
     }
 }
-@Composable private fun ExpenseRow(item:ExpenseRecord,onDelete:()->Unit) {
+@Composable private fun ExpenseRow(item:ExpenseRecord,onEdit:()->Unit,onDelete:()->Unit) {
     ElevatedCard(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Text(item.title,fontWeight=FontWeight.Bold); Text("${item.category} • ${item.date}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant); if(item.notes.isNotBlank()) Text(item.notes,style=MaterialTheme.typography.bodySmall) }
-        Column(horizontalAlignment=Alignment.End) { Text(FinanceCalculations.money(item.amount),color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold); TextButton(onClick=onDelete) { Text("حذف",color=MaterialTheme.colorScheme.error) } }
+        Column(horizontalAlignment=Alignment.End) { Text(FinanceCalculations.money(item.amount),color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold); Row { TextButton(onClick=onEdit) { Text("تعديل") }; TextButton(onClick=onDelete) { Text("حذف",color=MaterialTheme.colorScheme.error) } } }
     } }
 }
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun AddExpenseDialog(onDismiss:()->Unit,onSave:(ExpenseRecord)->Unit) {
-    var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(FinanceSection.HOUSE) }; var date by remember { mutableStateOf(LocalDate.now().toString()) }
-    var notes by remember { mutableStateOf("") }; var payment by remember { mutableStateOf("unknown") }; var expanded by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest=onDismiss,title={Text("إضافة مصروف")},text={
+@Composable private fun AddExpenseDialog(initial:ExpenseRecord?,onDismiss:()->Unit,onSave:(ExpenseRecord)->Unit) {
+    var title by remember(initial) { mutableStateOf(initial?.title ?: "") }; var amount by remember(initial) { mutableStateOf(initial?.amount?.toString() ?: "") }
+    var category by remember(initial) { mutableStateOf(FinanceSection.entries.firstOrNull { it.type == initial?.type } ?: FinanceSection.HOUSE) }; var date by remember(initial) { mutableStateOf(initial?.date ?: LocalDate.now().toString()) }
+    var notes by remember(initial) { mutableStateOf(initial?.notes ?: "") }; var payment by remember(initial) { mutableStateOf(initial?.paymentMethod ?: "unknown") }; var expanded by remember { mutableStateOf(false) }
+    AlertDialog(onDismissRequest=onDismiss,title={Text(if (initial == null) "إضافة مصروف" else "تعديل المصروف")},text={
         Column(Modifier.heightIn(max=520.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(title,{title=it},label={Text("البيان")},singleLine=true)
             OutlinedTextField(amount,{amount=it},label={Text("المبلغ")},singleLine=true)
@@ -117,8 +120,8 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
     },confirmButton={ Button(onClick={
         val value=amount.toDoubleOrNull()
         if(title.isNotBlank() && value!=null && value>=0 && runCatching { LocalDate.parse(date) }.isSuccess)
-            onSave(ExpenseRecord(title=title,amount=value,type=category.type,category=category.label,date=date,notes=notes,paymentMethod=payment))
-    }) { Text("حفظ") } },dismissButton={TextButton(onClick=onDismiss){Text("إلغاء")}})
+            onSave(ExpenseRecord(id=initial?.id ?: 0,title=title,amount=value,type=category.type,category=category.label,date=date,notes=notes,paymentMethod=payment,createdAt=initial?.createdAt ?: System.currentTimeMillis()))
+    }) { Text(if (initial == null) "حفظ" else "حفظ التعديلات") } },dismissButton={TextButton(onClick=onDismiss){Text("إلغاء")}})
 }
 @Composable private fun IncomeScreen(month:String,incomes:List<MonthlyIncomeRecord>,onSave:(MonthlyIncomeRecord)->Unit) {
     val current=incomes.firstOrNull { it.month==month }
