@@ -11,6 +11,16 @@ class FinanceCalculationsTest {
         assertFalse(FinanceCalculations.isInMonth("2026-09-30", "2026-10"))
     }
 
+    @Test fun expenseFilterReturnsOnlySelectedSectionAndAllForAll() {
+        val expenses = listOf(
+            ExpenseRecord(id = 1, title = "Groceries", amount = 100.0, type = "house", category = "المنزل", date = "2026-10-01"),
+            ExpenseRecord(id = 2, title = "Fuel", amount = 250.0, type = "vehicle_fuel", category = "وقود السيارة", date = "2026-10-02")
+        )
+        assertEquals(listOf(2L), FinanceCalculations.filterExpenses(expenses, "vehicle_fuel").map { it.id })
+        assertEquals(2, FinanceCalculations.filterExpenses(expenses, "all").size)
+        assertEquals(2, FinanceCalculations.filterExpenses(expenses, null).size)
+    }
+
     @Test fun incomeTotalAddsAllIncomeSources() {
         assertEquals(17500.0, MonthlyIncomeRecord("2026-10", 12000.0, 2500.0, 3000.0).total, 0.001)
     }
