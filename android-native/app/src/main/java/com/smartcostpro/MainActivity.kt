@@ -62,7 +62,7 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
                 MainTab.DASHBOARD -> DashboardScreen(month,income,certProfit,expenseTotal,balance,expenses.take(5),{ tab = MainTab.EXPENSES },{ editingExpense = it; showAddExpense = true })
                 MainTab.EXPENSES -> ExpensesScreen(month,expenses,{ editingExpense = null; showAddExpense = true },{ editingExpense = it; showAddExpense = true },{ db.deleteExpense(it); refresh++; message = "تم حذف المصروف" })
                 MainTab.INCOME -> IncomeScreen(month,incomes,{ db.saveIncome(it); refresh++; message = "تم حفظ الدخل الشهري" })
-                MainTab.CERTIFICATES -> CertificatesScreen(certificates,month,{ db.addCertificate(it); refresh++; message = "تم حفظ الشهادة" },{ db.deleteCertificate(it); refresh++; message = "تم حذف الشهادة" })
+                MainTab.CERTIFICATES -> CertificatesScreen(certificates,month,{ item -> runCatching { if (item.id > 0) db.updateCertificate(item) else db.addCertificate(item) }.onSuccess { refresh++; message = if (item.id > 0) "تم تحديث الشهادة" else "تم حفظ الشهادة" } .onFailure { message = it.message ?: "تعذر حفظ الشهادة" } },{ db.deleteCertificate(it); refresh++; message = "تم حذف الشهادة" })
                 MainTab.REPORTS -> ReportsScreen(month,income,certProfit,expenses,balance,certificates.sumOf { it.amount })
             }
         }
@@ -140,7 +140,8 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
     }
 }
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun CertificatesScreen(certificates:List<CertificateRecord>,month:String,onAdd:(CertificateRecord)->Unit,onDelete:(Long)->Unit) {
+@Composable private fun CertificatesScreen(certificates:List<CertificateRecord>,month:String,onSave:(CertificateRecord)->Unit,onDelete:(Long)->Unit) {
+    var editingId by remember { mutableLongStateOf(0L) }
     var bank by remember { mutableStateOf("") }; var number by remember { mutableStateOf("") }; var duration by remember { mutableStateOf("1 سنة") }
     var amount by remember { mutableStateOf("") }; var rate by remember { mutableStateOf("") }
     var issue by remember { mutableStateOf(LocalDate.now().toString()) }; var maturity by remember { mutableStateOf(LocalDate.now().plusYears(1).toString()) }
@@ -166,13 +167,13 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
         Button(onClick={
             val a=amount.toDoubleOrNull()?:0.0; val p=profitAmount.toDoubleOrNull()?:preview.periodic
             if(bank.isNotBlank()&&duration.isNotBlank()&&a>0&&p>=0&&runCatching { LocalDate.parse(issue) }.isSuccess&&runCatching { LocalDate.parse(maturity) }.isSuccess&&runCatching { LocalDate.parse(profitDate) }.isSuccess) {
-                onAdd(CertificateRecord(bankName=bank,certificateNumber=number,duration=duration,amount=a,annualRate=rate.toDoubleOrNull()?:0.0,issueDate=issue,maturityDate=maturity,profitDate=profitDate,profitAmount=p,frequency=frequency,notes=notes))
-                bank="";number="";amount="";rate="";profitAmount="";notes=""
+                onSave(CertificateRecord(id=editingId,bankName=bank,certificateNumber=number,duration=duration,amount=a,annualRate=rate.toDoubleOrNull()?:0.0,issueDate=issue,maturityDate=maturity,profitDate=profitDate,profitAmount=p,frequency=frequency,notes=notes))
+                editingId=0L; bank="";number="";duration="1 سنة";amount="";rate="";profitAmount="";notes=""
             }
-        },modifier=Modifier.fillMaxWidth()){Text("حفظ الشهادة")}
+        },modifier=Modifier.fillMaxWidth()){Text(if(editingId==0L) "حفظ الشهادة" else "حفظ تعديلات الشهادة")}
         certificates.forEach { c -> ElevatedCard(Modifier.fillMaxWidth()) { Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(c.bankName,fontWeight=FontWeight.Bold); Text("${c.duration} • ${FinanceCalculations.money(c.amount)}"); Text("العائد الشهري: ${FinanceCalculations.money(FinanceCalculations.certificateMonthlyProfit(c,month))}",color=MaterialTheme.colorScheme.primary) }
-            TextButton(onClick={onDelete(c.id)}){Text("حذف",color=MaterialTheme.colorScheme.error)}
+            Column { TextButton(onClick={ editingId=c.id; bank=c.bankName; number=c.certificateNumber; duration=c.duration; amount=c.amount.toString(); rate=c.annualRate.toString(); issue=c.issueDate; maturity=c.maturityDate; profitDate=c.profitDate; profitAmount=c.profitAmount.toString(); frequency=c.frequency; notes=c.notes }){Text("تعديل")}; TextButton(onClick={onDelete(c.id)}){Text("حذف",color=MaterialTheme.colorScheme.error)} }
         } } }
     }
 }
