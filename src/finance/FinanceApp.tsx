@@ -3,7 +3,7 @@ import { ExpensesView } from "../components/ExpensesView";
 import { IncomeCertificatesView } from "../components/IncomeCertificatesView";
 import type { Language } from "../types";
 
-export export function FinanceApp() {
+export function FinanceApp() {
   const [language,setLanguage]=useState<Language>("ar");
   const [currency,setCurrency]=useState("EGP");
   const [theme,setTheme]=useState<"light"|"dark">("dark");
