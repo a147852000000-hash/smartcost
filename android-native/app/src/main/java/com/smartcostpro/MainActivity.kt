@@ -194,7 +194,7 @@ private enum class MainTab(val title: String) { DASHBOARD("الرئيسية"), E
             val csv = buildString {
                 appendLine("date,title,type,category,amount,payment_method,notes")
                 expenses.forEach { item ->
-                    fun cell(value: String) = "\\\"$\\{value.replace("\\\"","\\\"\\\"")}\\\""
+                    fun cell(value: String) = "\"" + value.replace("\"", "\"\"") + "\""
                     appendLine(listOf(item.date,cell(item.title),cell(item.type),cell(item.category),item.amount.toString(),cell(item.paymentMethod),cell(item.notes)).joinToString(","))
                 }
             }
