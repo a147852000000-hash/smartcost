@@ -52,13 +52,13 @@ app.post("/api/expenses", (req, res) => {
   const validTypes = new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]);
   if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category, 80) || !date(b.date) || (b.type !== undefined && !validTypes.has(String(b.type))) || (b.notes !== undefined && b.notes !== null && typeof b.notes !== "string")) return sendError(res, 400, "invalid expense");
   const t = now(), id = typeof b.id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(b.id) ? b.id : randomUUID();
-  db.prepare("INSERT INTO expenses(id,title,amount,type,category,date,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?)").run(id, b.title.trim(), b.amount, String(b.type || "house"), b.category.trim(), b.date, typeof b.notes === "string" ? b.notes.slice(0,2000) : null, t, t);
+  db.prepare("INSERT INTO expenses(id,title,amount,type,category,date,notes,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?)").run(id, String(b.title).trim(), Number(b.amount), String(b.type || "house"), String(b.category).trim(), b.date, typeof b.notes === "string" ? b.notes.slice(0,2000) : null, t, t);
   res.status(201).json(db.prepare("SELECT * FROM expenses WHERE id=?").get(id));
 });
 app.put("/api/expenses/:id", (req, res) => {
   const b = req.body;
   if (!isObject(b) || !text(b.title) || !nonnegative(b.amount) || !text(b.category,80) || !date(b.date) || (b.type !== undefined && !new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]).has(String(b.type))) || (b.notes !== undefined && b.notes !== null && typeof b.notes !== "string")) return sendError(res,400,"invalid expense");
-  const result = db.prepare("UPDATE expenses SET title=?,amount=?,type=?,category=?,date=?,notes=?,updatedAt=? WHERE id=?").run(b.title.trim(),b.amount,String(b.type || "house"),b.category.trim(),b.date,typeof b.notes==="string"?b.notes.slice(0,2000):null,now(),req.params.id);
+  const result = db.prepare("UPDATE expenses SET title=?,amount=?,type=?,category=?,date=?,notes=?,updatedAt=? WHERE id=?").run(String(b.title).trim(),Number(b.amount),String(b.type || "house"),String(b.category).trim(),b.date,typeof b.notes==="string"?b.notes.slice(0,2000):null,now(),req.params.id);
   if (!result.changes) return sendError(res,404,"expense not found");
   res.json(db.prepare("SELECT * FROM expenses WHERE id=?").get(req.params.id));
 });
@@ -82,7 +82,7 @@ app.put("/api/income/:month", (req,res) => {
 });
 
 const frequencies = new Set(["monthly","quarterly","semiannual","annual","maturity"]);
-const validCertificate = (b: Record<string,unknown>) => text(b.bankName,160) && text(b.duration,100) && nonnegative(b.amount) && b.amount > 0 && date(b.issueDate) && date(b.maturityDate) && date(b.profitDate) && nonnegative(b.profitAmount) && text(b.profitFrequency,20) && frequencies.has(String(b.profitFrequency)) && (b.certificateNumber===undefined || b.certificateNumber===null || typeof b.certificateNumber==="string") && (b.notes===undefined || b.notes===null || typeof b.notes==="string");
+const validCertificate = (b: Record<string,unknown>) => text(b.bankName,160) && text(b.duration,100) && nonnegative(b.amount) && Number(b.amount) > 0 && date(b.issueDate) && date(b.maturityDate) && date(b.profitDate) && nonnegative(b.profitAmount) && text(b.profitFrequency,20) && frequencies.has(String(b.profitFrequency)) && (b.certificateNumber===undefined || b.certificateNumber===null || typeof b.certificateNumber==="string") && (b.notes===undefined || b.notes===null || typeof b.notes==="string");
 app.get("/api/car-income", (_req,res) => {
  const rows=db.prepare("SELECT tripJson FROM car_income_trips ORDER BY date DESC").all() as Array<{tripJson:string}>;
  res.json(rows.map(row=>{try{return JSON.parse(row.tripJson)}catch{return null}}).filter(Boolean));
@@ -90,7 +90,7 @@ app.get("/api/car-income", (_req,res) => {
 app.put("/api/car-income-sync", (req,res) => {
  const b=req.body;
  if(!isObject(b)||!Array.isArray(b.items)||b.items.length>10000)return sendError(res,400,"invalid car income payload");
- const valid=b.items.every((x:any)=>isObject(x)&&text(x.id,100)&&nonnegative(x.amount)&&date(x.date)&&((typeof x.tripNumber==="string"&&x.tripNumber.length<=100)||typeof x.tripNumber==="number")&&(x.createdAt===undefined||typeof x.createdAt==="string"));
+ const valid=(b.items as unknown[]).every((x:any)=>isObject(x)&&text(x.id,100)&&nonnegative(x.amount)&&date(x.date)&&((typeof x.tripNumber==="string"&&x.tripNumber.length<=100)||typeof x.tripNumber==="number")&&(x.createdAt===undefined||typeof x.createdAt==="string"));
  if(!valid)return sendError(res,400,"car income validation failed");
  const tx=db.transaction(()=>{
   db.prepare("DELETE FROM car_income_trips").run();
@@ -152,7 +152,7 @@ const backup = () => ({
 app.get("/api/backup", (_req,res) => res.json(backup()));
 app.post("/api/backup/restore", (req,res) => {
   const b=req.body;
-  if (!isObject(b) || b.schemaVersion!==1 || !Array.isArray(b.expenses) || !Array.isArray(b.income) || !Array.isArray(b.certificates) || (b.carIncome!==undefined&&!Array.isArray(b.carIncome)) || b.expenses.length>10000 || b.income.length>2400 || b.certificates.length>5000 || (Array.isArray(b.carIncome)&&b.carIncome.length>10000)) return sendError(res,400,"invalid backup format");
+  if (!isObject(b) || b.schemaVersion!==1 || !Array.isArray(b.expenses) || !Array.isArray(b.income) || !Array.isArray(b.certificates) || (b.carIncome!==undefined&&!Array.isArray(b.carIncome)) || (b.expenses as unknown[]).length>10000 || (b.income as unknown[]).length>2400 || (b.certificates as unknown[]).length>5000 || (Array.isArray(b.carIncome)&&(b.carIncome as unknown[]).length>10000)) return sendError(res,400,"invalid backup format");
   const expenseValid=b.expenses.every((x:any)=>isObject(x)&&text(x.id,100)&&text(x.title)&&nonnegative(x.amount)&&text(x.category,80)&&date(x.date)&&(x.type===undefined||new Set(["house","medical","personal","student","vehicle_fuel","vehicle_maint","vehicle_oil","work"]).has(String(x.type)))&&(x.notes===null||x.notes===undefined||typeof x.notes==="string"));
   const incomeValid=b.income.every((x:any)=>isObject(x)&&month(x.month)&&nonnegative(x.salary)&&nonnegative(x.bonuses)&&nonnegative(x.otherIncome));
   const certValid=b.certificates.every((x:any)=>isObject(x)&&text(x.id,100)&&validCertificate(x));
