@@ -75,7 +75,6 @@ export const CarIncomeSection: React.FC<CarIncomeSectionProps> = ({
 
   // State: List of all car trips
   const [trips, setTrips] = useState<CarTripIncomeRecord[]>(() => StorageAdapter.getItem<CarTripIncomeRecord[]>(STORAGE_KEY, []));
-  const [serverLoaded, setServerLoaded] = useState(false);
 
   // Active view: 'entry' (تسجيل الرحلات) | 'report' (تقرير ومعاينة الدخل)
   const [activeSubTab, setActiveSubTab] = useState<'entry' | 'report'>('entry');
@@ -106,26 +105,9 @@ export const CarIncomeSection: React.FC<CarIncomeSectionProps> = ({
   const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
 
   useEffect(() => {
-    void fetch("/api/car-income").then(async response => {
-      if (response.ok) {
-        const serverTrips = await response.json() as CarTripIncomeRecord[];
-        if (Array.isArray(serverTrips) && serverTrips.length > 0) {
-          setTrips(serverTrips);
-          StorageAdapter.setItem(STORAGE_KEY, serverTrips);
-        } else if (trips.length > 0) {
-          void fetch("/api/car-income-sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: trips }) }).catch(() => {});
-        }
-      }
-    }).catch(() => {}).finally(() => setServerLoaded(true));
-  }, []);
-
-  useEffect(() => {
     StorageAdapter.setItem(STORAGE_KEY, trips);
-    if (serverLoaded) {
-      void fetch("/api/car-income-sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: trips }) }).catch(() => {});
-    }
     if (onSyncWithMonthlyIncome) onSyncWithMonthlyIncome(trips);
-  }, [trips, onSyncWithMonthlyIncome, serverLoaded]);
+  }, [trips, onSyncWithMonthlyIncome]);
 
   // Next recommended trip number
   const nextTripNumberName = useMemo(() => {

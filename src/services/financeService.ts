@@ -1,37 +1,90 @@
 import type { ExpenseType } from "../contracts/financeContract";
+import { StorageAdapter } from "./storageAdapter";
+import { STORAGE_KEYS } from "./storageKeys";
+
 export interface CanonicalExpenseInput {
-  id?:string; type:ExpenseType; title?:string; amount:number; category?:string; date:string;
-  paymentMethod?:string; receiptUrl?:string; notes?:string|null; createdAt?:string;
+  id?: string; type: ExpenseType; title?: string; amount: number; category?: string; date: string;
+  paymentMethod?: string; receiptUrl?: string; notes?: string | null; createdAt?: string;
 }
-async function request<T>(path:string,init?:RequestInit):Promise<T>{
- const res=await fetch(path,{...init,headers:{"Content-Type":"application/json",Accept:"application/json",...(init?.headers||{})}});
- const payload=await res.json().catch(()=>({}));
- if(!res.ok)throw new Error(String((payload as any)?.error||"تعذر تنفيذ العملية المالية."));
- return payload as T;
+
+const EXPENSES_KEY = STORAGE_KEYS.EXPENSES;
+
+function readAll(): Array<Record<string, unknown>> {
+  return StorageAdapter.getItem<Array<Record<string, unknown>>>(EXPENSES_KEY, []) || [];
 }
-export async function getAllExpenses():Promise<Array<Record<string,unknown>>>{return request("/api/expenses")}
-export async function getExpenses(query:{type?:ExpenseType|ExpenseType[];from?:string;to?:string}={}):Promise<Array<Record<string,unknown>>>{
- const rows=await getAllExpenses(),types=query.type?(Array.isArray(query.type)?query.type:[query.type]):undefined;
- return rows.filter(x=>{const type=String(x.type||"house"),date=String(x.date||"").slice(0,10);return(!types||types.includes(type as ExpenseType))&&(!query.from||date>=query.from)&&(!query.to||date<=query.to)});
+function writeAll(items: Array<Record<string, unknown>>): void {
+  StorageAdapter.setItem(EXPENSES_KEY, items);
 }
-export async function createCanonicalFinanceExpense(input:CanonicalExpenseInput):Promise<Record<string,unknown>>{
- return request("/api/expenses",{method:"POST",body:JSON.stringify({...input,title:input.title||input.category||input.type,category:input.category||input.type})});
+
+export async function getAllExpenses(): Promise<Array<Record<string, unknown>>> {
+  return readAll();
 }
-export async function updateCanonicalFinanceExpense(id:string,patch:Partial<CanonicalExpenseInput>):Promise<Record<string,unknown>>{
- const rows=await getAllExpenses();
- const current=rows.find(row=>String(row.id)===id);
- if(!current)throw new Error("المصروف غير موجود.");
- const merged={...current,...patch};
- return request("/api/expenses/"+encodeURIComponent(id),{method:"PUT",body:JSON.stringify({
-   id, title:String(merged.title||merged.category||merged.type||"مصروف"),
-   amount:Number(merged.amount)||0, type:String(merged.type||"house"),
-   category:String(merged.category||merged.type||"house"), date:String(merged.date||"").slice(0,10),
-   notes:merged.notes==null?null:String(merged.notes)
- })});
+
+export async function getExpenses(
+  query: { type?: ExpenseType | ExpenseType[]; from?: string; to?: string } = {}
+): Promise<Array<Record<string, unknown>>> {
+  const rows = await getAllExpenses();
+  const types = query.type ? (Array.isArray(query.type) ? query.type : [query.type]) : undefined;
+  return rows.filter((x) => {
+    const type = String(x.type || "house");
+    const date = String(x.date || "").slice(0, 10);
+    return (
+      (!types || types.includes(type as ExpenseType)) &&
+      (!query.from || date >= query.from) &&
+      (!query.to || date <= query.to)
+    );
+  });
 }
-export async function deleteCanonicalFinanceExpense(id:string):Promise<void>{
- const res=await fetch("/api/expenses/"+encodeURIComponent(id),{method:"DELETE"});
- if(!res.ok)throw new Error("تعذر حذف المصروف.");
+
+export async function createCanonicalFinanceExpense(
+  input: CanonicalExpenseInput
+): Promise<Record<string, unknown>> {
+  const items = readAll();
+  const id = typeof input.id === "string" && input.id ? input.id : `exp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const now = new Date().toISOString();
+  const record: Record<string, unknown> = {
+    id,
+    title: input.title || input.category || input.type,
+    amount: input.amount,
+    type: input.type,
+    category: input.category || input.type,
+    date: input.date,
+    paymentMethod: input.paymentMethod || "unknown",
+    receiptUrl: input.receiptUrl || null,
+    notes: input.notes ?? null,
+    createdAt: input.createdAt || now,
+    updatedAt: now,
+  };
+  writeAll([record, ...items]);
+  return record;
 }
-export const addExpense=createCanonicalFinanceExpense;
-export const financeService={getAllExpenses,getExpenses,createCanonicalFinanceExpense,addExpense,updateCanonicalFinanceExpense,deleteCanonicalFinanceExpense};
+
+export async function updateCanonicalFinanceExpense(
+  id: string,
+  patch: Partial<CanonicalExpenseInput>
+): Promise<Record<string, unknown>> {
+  const items = readAll();
+  const idx = items.findIndex((row) => String(row.id) === id);
+  if (idx === -1) throw new Error("المصروف غير موجود.");
+  const current = items[idx];
+  const merged = { ...current, ...patch, updatedAt: new Date().toISOString() };
+  items[idx] = merged;
+  writeAll(items);
+  return merged;
+}
+
+export async function deleteCanonicalFinanceExpense(id: string): Promise<void> {
+  const items = readAll().filter((row) => String(row.id) !== id);
+  writeAll(items);
+}
+
+export const addExpense = createCanonicalFinanceExpense;
+
+export const financeService = {
+  getAllExpenses,
+  getExpenses,
+  createCanonicalFinanceExpense,
+  addExpense,
+  updateCanonicalFinanceExpense,
+  deleteCanonicalFinanceExpense,
+};
